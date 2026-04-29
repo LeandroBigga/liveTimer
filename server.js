@@ -69,9 +69,7 @@ console.log("solveEnd empfangen:", time, "| room:", socket.data.roomId);
 
     userSolves.push(t);
 
-    if (userSolves.length > 5) {
-        userSolves.shift();
-    }
+    
 
     const ao5 = calcAO5(userSolves);
 
@@ -83,7 +81,11 @@ console.log("solveEnd empfangen:", time, "| room:", socket.data.roomId);
         ao5
     });
 });
-
+    socket.on("timeUpdate", (time) => {
+        const room = socket.data.roomId;
+        if (!room) return;
+            socket.to(room).emit("timeUpdate", { id: socket.id, time });
+    });
     // ---------------- DISCONNECT ----------------
     socket.on("disconnect", () => {
 
@@ -96,8 +98,10 @@ console.log("solveEnd empfangen:", time, "| room:", socket.data.roomId);
 
         io.to(room).emit("removeUser", socket.id);
     });
+    
 
 });
+
 
 // ---------------- AO5 FIX ----------------
 function calcAO5(arr) {
