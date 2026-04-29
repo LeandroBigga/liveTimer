@@ -7,11 +7,16 @@
 
 <h1>Dein Timer</h1>
 <h1 id="timer">0.00</h1>
+
 <button onclick="start()">Start</button>
 <button onclick="stop()">Stop</button>
 
+<button onclick="newScramble()">New Scramble</button>
+
 <h1>Live (anderer User)</h1>
 <h1 id="live">0.00</h1>
+
+<h2 id="scramble">loading...</h2>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
@@ -21,6 +26,16 @@ let startTime = 0;
 let interval = null;
 let running = false;
 
+// ---------- SCRAMBLE ----------
+socket.on("scrambleUpdate", (s) => {
+    document.getElementById("scramble").textContent = s;
+});
+
+function newScramble() {
+    socket.emit("newScramble");
+}
+
+// ---------- TIMER ----------
 function start() {
     if (running) return;
 
@@ -29,9 +44,10 @@ function start() {
 
     interval = setInterval(() => {
         const time = ((Date.now() - startTime) / 1000).toFixed(2);
+
         document.getElementById("timer").textContent = time;
 
-        socket.emit("timeUpdate", time); // 👈 senden
+        socket.emit("timeUpdate", time);
     }, 50);
 }
 
@@ -40,10 +56,19 @@ function stop() {
 
     running = false;
     clearInterval(interval);
-    interval = null;
 }
 
-// 👇 empfangen
+// ---------- SPACEBAR ----------
+document.addEventListener("keydown", (e) => {
+    if (e.code === "Space") {
+        e.preventDefault();
+
+        if (!running) start();
+        else stop();
+    }
+});
+
+// ---------- LIVE ----------
 socket.on("timeUpdate", (time) => {
     document.getElementById("live").textContent = time;
 });
