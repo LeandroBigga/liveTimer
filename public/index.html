@@ -1,76 +1,289 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Live Timer</title>
+    <title>Room Timer</title>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+        }
+
+        input, button {
+            margin: 4px;
+        }
+
+        /* ---------------- MAIN TIMER ---------------- */
+        #timer {
+            font-size: 70px;
+            font-weight: bold;
+            transition: color 0.15s;
+        }
+
+        .arming {
+            color: rgb(255, 0, 0);
+        }
+
+        .ready {
+            color: limegreen;
+        }
+
+        /* ---------------- SCRAMBLE ---------------- */
+        #myScramble {
+            font-size: 16px;
+            color: #444;
+            margin-bottom: 10px;
+            word-break: break-word;
+        }
+
+        /* ---------------- ROOM USERS ---------------- */
+        #users {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            justify-content: center;
+            margin-top: 20px;
+        }
+
+        .box {
+            border: 1px solid #ccc;
+            border-radius: 10px;
+            padding: 12px;
+            width: 220px;
+            background: #fafafa;
+            text-align: center;
+        }
+
+        .scramble {
+            font-size: 13px;
+            color: #444;
+            margin-bottom: 10px;
+            word-break: break-word;
+        }
+
+        .time {
+            font-size: 28px;
+            font-weight: bold;
+        }
+    </style>
 </head>
+
 <body>
 
-<h1>Dein Timer</h1>
-<h1 id="timer">0.00</h1>
+<h1>Room System</h1>
 
-<button onclick="start()">Start</button>
-<button onclick="stop()">Stop</button>
+<input id="roomInput" placeholder="Room Code">
+<button onclick="joinRoom()">Join Room</button>
+
+<h3 id="roomStatus">No room</h3>
+
+<hr>
+
+<div id="myScramble">No scramble</div>
+<div id="timer">0.00</div>
+
+<br>
 
 <button onclick="newScramble()">New Scramble</button>
 
-<h1>Live (anderer User)</h1>
-<h1 id="live">0.00</h1>
+<hr>
 
-<h2 id="scramble">loading...</h2>
+<h2>Room Users</h2>
+<div id="users"></div>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
 const socket = io();
 
+/* ---------------- STATE ---------------- */
+let state = "idle"; // idle | arming | ready | running
+let inputLock = false;
+let running = false;
+let armed = false;
+/* ---------------- TIMER ---------------- */
 let startTime = 0;
 let interval = null;
-let running = false;
 
-// ---------- SCRAMBLE ----------
-socket.on("scrambleUpdate", (s) => {
-    document.getElementById("scramble").textContent = s;
-});
+/* ---------------- HOLD ---------------- */
 
-function newScramble() {
-    socket.emit("newScramble");
+
+/* ---------------- ROOM ---------------- */
+function joinRoom() {
+    const room = document.getElementById("roomInput").value;
+    const name = prompt("Dein Name:");
+
+    if (!room || !name) return;
+
+    socket.emit("joinRoom", {
+        roomId: room,
+        name: name
+    });
+
+    document.getElementById("roomStatus").textContent =
+        "Room: " + room + " | Name: " + name;
+
+    document.getElementById("users").innerHTML = "";
 }
 
-// ---------- TIMER ----------
+/* ---------------- SCRAMBLE ---------------- */
+function generateWCAScramble() {
+    const axes = {
+        X: ["R", "L"],
+        Y: ["U", "D"],
+        Z: ["F", "B"]
+    };
+
+    const suffix = ["", "'", "2"];
+    const axisKeys = Object.keys(axes);
+
+    let scramble = [];
+    let lastAxis = null;
+
+    for (let i = 0; i < 20; i++) {
+        let axis;
+
+        do {
+            axis = axisKeys[Math.floor(Math.random() * axisKeys.length)];
+        } while (axis === lastAxis);
+
+        lastAxis = axis;
+
+        const move = axes[axis][Math.floor(Math.random() * 2)];
+        const mod = suffix[Math.floor(Math.random() * suffix.length)];
+
+        scramble.push(move + mod);
+    }
+
+    return scramble.join(" ");
+}
+
+let myScramble = generateWCAScramble();
+
+function newScramble() {
+    myScramble = generateWCAScramble();
+    document.getElementById("myScramble").textContent = myScramble;
+
+    socket.emit("scrambleUpdate", {
+        scramble: myScramble
+    });
+}
+
+/* ---------------- RECEIVE ---------------- */
+socket.on("scrambleUpdate", (data) => {
+    if (!data || !data.id) return;
+    renderUser(data.id, data.name, data.scramble, "0.00");
+});
+
+socket.on("timeUpdate", (data) => {
+    updateUser(data.id, data.time);
+});
+
+/* ---------------- USERS ---------------- */
+function renderUser(id, name, scramble, time) {
+    let el = document.getElementById("u_" + id);
+
+    if (!el) {
+        el = document.createElement("div");
+        el.className = "box";
+        el.id = "u_" + id;
+        document.getElementById("users").appendChild(el);
+    }
+
+    el.innerHTML = `
+        <b>${name || "Unknown"}</b>
+        <div class="scramble">${scramble}</div>
+        <div class="time" id="t_${id}">${time}</div>
+    `;
+}
+
+function updateUser(id, time) {
+    const el = document.getElementById("t_" + id);
+    if (el) el.textContent = time;
+}
+
+/* ---------------- TIMER START ---------------- */
 function start() {
     if (running) return;
 
     running = true;
+
     startTime = Date.now();
+
+    const el = document.getElementById("timer");
+    el.classList.remove("ready", "arming");
 
     interval = setInterval(() => {
         const time = ((Date.now() - startTime) / 1000).toFixed(2);
-
-        document.getElementById("timer").textContent = time;
+        el.textContent = time;
 
         socket.emit("timeUpdate", time);
     }, 50);
 }
 
+/* ---------------- TIMER STOP ---------------- */
 function stop() {
-    if (!running) return;
-
     running = false;
+
     clearInterval(interval);
+    interval = null;
+
+    clearTimeout(holdTimer);
+
+    document.getElementById("timer")
+        .classList.remove("ready", "arming");
 }
 
-// ---------- SPACEBAR ----------
-document.addEventListener("keydown", (e) => {
-    if (e.code === "Space") {
-        e.preventDefault();
+/* ---------------- SPACE HOLD ---------------- */
+let spaceDown = false;
+let holdTimer = null;
 
-        if (!running) start();
-        else stop();
+document.addEventListener("keydown", (e) => {
+    if (e.code !== "Space") return;
+    if (e.repeat) return;
+
+    e.preventDefault();
+
+    spaceDown = true;
+
+    // 🟢 WENN RUNNING → STOP DIREKT BEI KEYDOWN
+    if (running) {
+        stop();
+        return;
     }
+
+    // 🟡 sonst ARMING PHASE
+    const el = document.getElementById("timer");
+    el.classList.add("arming");
+
+    holdTimer = setTimeout(() => {
+        armed = true;
+        el.classList.remove("arming");
+        el.classList.add("ready");
+    }, 500);
 });
 
-// ---------- LIVE ----------
-socket.on("timeUpdate", (time) => {
-    document.getElementById("live").textContent = time;
+document.addEventListener("keyup", (e) => {
+    if (e.code !== "Space") return;
+
+    e.preventDefault();
+
+    spaceDown = false;
+    clearTimeout(holdTimer);
+
+    const el = document.getElementById("timer");
+    el.classList.remove("arming");
+
+    // 🟢 START nur wenn armed UND nicht running
+    if (armed && !running) {
+        start();
+    }
+
+    armed = false;
+});
+
+/* ---------------- SAFETY ---------------- */
+window.addEventListener("blur", () => {
+    stop();
 });
 </script>
 

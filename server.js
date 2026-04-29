@@ -8,63 +8,74 @@ const io = new Server(server);
 
 app.use(express.static("public"));
 
-const ROOM = "global";
+const rooms = {};
 
-// ---------- WCA SCRAMBLE ----------
-function generateWCAScramble() {
-    const axes = {
-        X: ["R", "L"],
-        Y: ["U", "D"],
-        Z: ["F", "B"]
-    };
-
-    const suffix = ["", "'", "2"];
-    const axisKeys = Object.keys(axes);
-
-    let scramble = [];
-    let lastAxis = null;
-
-    for (let i = 0; i < 20; i++) {
-        let axis;
-
-        do {
-            axis = axisKeys[Math.floor(Math.random() * axisKeys.length)];
-        } while (axis === lastAxis);
-
-        lastAxis = axis;
-
-        const move = axes[axis][Math.floor(Math.random() * 2)];
-        const mod = suffix[Math.floor(Math.random() * suffix.length)];
-
-        scramble.push(move + mod);
-    }
-
-    return scramble.join(" ");
-}
-
-let currentScramble = generateWCAScramble();
-
-// ---------- SOCKET ----------
 io.on("connection", (socket) => {
-    socket.join(ROOM);
 
-    // sofort aktuellen Scramble senden
-    socket.emit("scrambleUpdate", currentScramble);
+    // ---------------- JOIN ----------------
+    socket.on("joinRoom", ({ roomId, name }) => {
 
-    // Zeit sync
+        socket.join(roomId);
+
+        socket.data.roomId = roomId;
+        socket.data.name = name || "Anonymous";
+
+        if (!rooms[roomId]) {
+            rooms[roomId] = {
+                scrambles: {},
+                times: {},
+                names: {}
+            };
+        }
+
+        rooms[roomId].names[socket.id] = socket.data.name;
+
+        socket.emit("initState", rooms[roomId]);
+    });
+
+    // ---------------- TIMER ----------------
     socket.on("timeUpdate", (time) => {
-        socket.to(ROOM).emit("timeUpdate", time);
+
+        const room = socket.data.roomId;
+        if (!room) return;
+
+        rooms[room].times[socket.id] = time;
+
+        io.to(room).emit("timeUpdate", {
+            id: socket.id,
+            name: socket.data.name,
+            time
+        });
     });
 
-    // optional: neuer Scramble für alle
-    socket.on("newScramble", () => {
-        currentScramble = generateWCAScramble();
-        io.to(ROOM).emit("scrambleUpdate", currentScramble);
+    // ---------------- SCRAMBLE ----------------
+    socket.on("scrambleUpdate", (data) => {
+
+        const room = socket.data.roomId;
+        if (!room) return;
+
+        rooms[room].scrambles[socket.id] = data.scramble;
+
+        io.to(room).emit("scrambleUpdate", {
+            id: socket.id,
+            name: socket.data.name,
+            scramble: data.scramble
+        });
     });
+
+    // ---------------- DISCONNECT ----------------
+    socket.on("disconnect", () => {
+
+        const room = socket.data.roomId;
+        if (!room || !rooms[room]) return;
+
+        delete rooms[room].scrambles[socket.id];
+        delete rooms[room].times[socket.id];
+        delete rooms[room].names[socket.id];
+
+        io.to(room).emit("removeUser", socket.id);
+    });
+
 });
 
-const PORT = process.env.PORT || 3000;
-
-server.listen(PORT, () => {
-    console.log("Server läuft auf Port " + PORT);
-});
+server.listen(3000, () => console.log("running"));
