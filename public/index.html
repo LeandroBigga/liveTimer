@@ -36,8 +36,8 @@
         .solve-row .avg.best-avg { color: #f0c060; }
         .solve-row .bestcell { color: #60c0f0; text-align: right; }
         #center { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; padding: 24px; }
-        #scramble-display { font-size: 16px; color: #7ab8e8; text-align: center; max-width: 600px; line-height: 1.7; letter-spacing: 1px; }
-        #timer { font-size: 96px; font-weight: bold; font-family: 'Courier New', monospace; color: #e0e0e0; transition: color 0.15s; letter-spacing: -3px; line-height: 1; }
+        #scramble-display { font-size: 24px; color: #7ab8e8; text-align: center; max-width: 600px; line-height: 1.7; letter-spacing: 1px; }
+        #timer { font-size: 150px; font-weight: bold; font-family: 'Courier New', monospace; color: #e0e0e0; transition: color 0.15s; letter-spacing: -3px; line-height: 1; }
         #timer.arming { color: #e05050; }
         #timer.ready  { color: #50e050; }
         #hint { font-size: 11px; color: #383838; text-transform: uppercase; letter-spacing: 2px; }
@@ -107,7 +107,10 @@
 <script src="/socket.io/socket.io.js"></script>
 <script>
 const socket = io();
-
+socket.on("connect", () => {
+    myId = socket.id;
+});
+let myId = null;
 let mySolves = [];
 let myName   = "";
 let running  = false;
@@ -139,34 +142,106 @@ function newScramble() {
     socket.emit("scrambleUpdate", { scramble: myScramble });
 }
 
-function joinRoom() {
-    const room = document.getElementById("roomInput").value.trim();
-    const name = prompt("Dein Name:");
-    if (!room || !name) return;
-    myName = name;
-    socket.emit("joinRoom", { roomId: room, name });
-    document.getElementById("roomStatus").textContent = room + " | " + name;
+const STORAGE_NAME_KEY = "livetimer_display_name";
+
+function getRoomFromQuery() {
+    const q = new URLSearchParams(location.search);
+    let r = (q.get("room") || q.get("r") || "").trim();
+    if (!r) return "";
+    try {
+        return decodeURIComponent(r).trim();
+    } catch {
+        return r;
+    }
+}
+
+function doJoinRoom(room, name) {
+    const n = (name || "").trim();
+    if (!room || !n) return;
+    myName = n;
+    try {
+        localStorage.setItem(STORAGE_NAME_KEY, n);
+    } catch (e) {}
+    document.getElementById("roomInput").value = room;
+    socket.emit("joinRoom", { roomId: room, name: n });
+    document.getElementById("roomStatus").textContent = room + " | " + n;
     document.getElementById("users").innerHTML = "";
     document.getElementById("btn-clear").style.display = "inline-block";
 }
 
+function joinRoom() {
+    const room = document.getElementById("roomInput").value.trim();
+    let def = "";
+    try {
+        def = localStorage.getItem(STORAGE_NAME_KEY) || "";
+    } catch (e) {}
+    const name = prompt("Dein Name:", def);
+    if (!room || !name || !name.trim()) return;
+    doJoinRoom(room, name.trim());
+}
+
+function tryJoinFromUrl() {
+    const room = getRoomFromQuery();
+    if (!room) return;
+    document.getElementById("roomInput").value = room;
+    let stored = "";
+    try {
+        stored = localStorage.getItem(STORAGE_NAME_KEY) || "";
+    } catch (e) {}
+    if (stored.trim()) {
+        doJoinRoom(room, stored.trim());
+        return;
+    }
+    const name = prompt("Dein Name:", "");
+    if (name && name.trim()) doJoinRoom(room, name.trim());
+}
+
+tryJoinFromUrl();
+
 function clearSolves() {
     if (!confirm("Alle Solves löschen?")) return;
-    mySolves = [];
-    renderSolveList();
-    updateStatsBar();
+    socket.emit("clearSolves");
 }
 
 function calcAoN(arr, n) {
     if (arr.length < n) return null;
-    const s = [...arr].slice(-n).sort((a,b)=>a-b);
-    const m = s.slice(1,-1);
-    return m.reduce((a,b)=>a+b,0) / m.length;
+    // Same WCA-style trimming as server: tie-break equals by attempt order within the window.
+    const seg = arr.slice(-n);
+    const indexed = seg.map((t, i) => ({ t, i }));
+    indexed.sort((a, b) => (a.t !== b.t ? a.t - b.t : a.i - b.i));
+    const middle = indexed.slice(1, -1).map((x) => x.t);
+    if (middle.some((v) => !Number.isFinite(v))) return Infinity;
+    return middle.reduce((a, b) => a + b, 0) / middle.length;
+}
+
+/** Local indices (0..4) dropped for Ao5 — WCA tie-break on equal times. */
+function ao5DroppedLocalIndices(window5) {
+    if (!Array.isArray(window5) || window5.length !== 5) return new Set();
+    const indexed = window5.map((t, i) => ({ t, i }));
+    indexed.sort((a, b) => (a.t !== b.t ? a.t - b.t : a.i - b.i));
+    return new Set([indexed[0].i, indexed[4].i]);
+}
+
+/** Klammern nur bei den aktuellen letzten 5 Solves — genau die zwei Streichzeiten für Ao5. */
+function isDroppedInLastAo5(i, solves) {
+    if (!Array.isArray(solves) || solves.length < 5) return false;
+    const base = solves.length - 5;
+    if (i < base) return false;
+    return ao5DroppedLocalIndices(solves.slice(-5)).has(i - base);
 }
 
 function fmt(v) {
-    if (v === null || v === undefined || isNaN(v)) return "–";
-    return parseFloat(v).toFixed(2);
+    if (v === null || v === undefined) return "–";
+    if (v === Infinity) return "DNF";
+    const n = Number(v);
+    if (!Number.isFinite(n)) return "–";
+    return n.toFixed(2);
+}
+
+/** Socket.IO uses JSON — Infinity serializes as null. Map null → DNF. */
+function normalizeSolveArray(raw) {
+    if (!Array.isArray(raw)) return [];
+    return raw.map((v) => (Object.is(v, null) ? Infinity : Number(v)));
 }
 
 function renderSolveList() {
@@ -181,33 +256,29 @@ function renderSolveList() {
     const allAo12 = mySolves.map((_,i) => i>=11 ? calcAoN(mySolves.slice(0,i+1),12) : null);
     const validAo5  = allAo5.filter(v=>v!==null);
     const validAo12 = allAo12.filter(v=>v!==null);
-    const bestAo5   = validAo5.length  ? Math.min(...validAo5)  : null;
-    const bestAo12  = validAo12.length ? Math.min(...validAo12) : null;
-    const globalBest = Math.min(...mySolves);
+    const bestAo5   = validAo5.length  ? Math.min(...validAo5.filter(Number.isFinite))  : null;
+    const bestAo12  = validAo12.length ? Math.min(...validAo12.filter(Number.isFinite)) : null;
+    const finiteSolves = mySolves.filter(Number.isFinite);
+    const globalBest = finiteSolves.length ? Math.min(...finiteSolves) : null;
 
     let html = "";
     for (let i = mySolves.length-1; i >= 0; i--) {
     const t    = mySolves[i];
     const ao5  = allAo5[i];
     const ao12 = allAo12[i];
-    const best = Math.min(...mySolves.slice(0,i+1));
-    const isPB = t === globalBest;
+    const prefixFinite = mySolves.slice(0,i+1).filter(Number.isFinite);
+    const best = prefixFinite.length ? Math.min(...prefixFinite) : null;
+    const isPB = globalBest !== null && Number.isFinite(t) && t === globalBest;
     const isLatest = i === mySolves.length-1;
 
-    // Prüfen ob diese Zeit in der aktuellen AO5 der beste oder schlechteste ist
+    // Ao5-Klammern nur für die letzten 5 Solves — verschiebt sich nach jedem neuen Solve.
     let timeStr = fmt(t);
-    if (i >= 4) {
-        const window5 = mySolves.slice(i-4, i+1);
-        const min5 = Math.min(...window5);
-        const max5 = Math.max(...window5);
-        if (t === min5 || t === max5) timeStr = `(${timeStr})`;
-    }
-    // DNF anzeigen
-    if (t === Infinity) timeStr = i >= 4 ? "(DNF)" : "DNF";
+    if (isDroppedInLastAo5(i, mySolves)) timeStr = `(${timeStr})`;
+    else if (i < 4 && t === Infinity) timeStr = "DNF";
 
-    html += `<div class="solve-row${isLatest?" latest":""}" oncontextmenu="deleteSolve(${i}); return false;">
-        <span class="num">${i+1}</span>
-        <span class="time${isPB?" pb":""}">${timeStr}</span>
+    html += `<div class="solve-row${isLatest ? " latest" : ""}" data-solve-index="${i}">
+        <span class="num">${i + 1}</span>
+        <span class="time${isPB ? " pb" : ""}">${timeStr}</span>
         ...
     </div>`;
 }
@@ -219,8 +290,9 @@ function updateStatsBar() {
     const ao5  = calcAoN(mySolves,5);
     const ao12 = calcAoN(mySolves,12);
     const ao50 = calcAoN(mySolves,50);
-    const best = mySolves.length ? Math.min(...mySolves) : null;
-    const mean = mySolves.length ? mySolves.reduce((a,b)=>a+b,0)/mySolves.length : null;
+    const finite = mySolves.filter(Number.isFinite);
+    const best = finite.length ? Math.min(...finite) : null;
+    const mean = finite.length ? finite.reduce((a,b)=>a+b,0)/finite.length : null;
     document.getElementById("stat-ao5").textContent  = fmt(ao5);
     document.getElementById("stat-ao12").textContent = fmt(ao12);
     document.getElementById("stat-ao50").textContent = fmt(ao50);
@@ -244,24 +316,34 @@ socket.on("scrambleUpdate", (data) => {
 });
 
 socket.on("solveUpdate", (data) => {
-    const solves = (data.solves||[]).map(Number);
-    if (data.name === myName) {
+    const solves = normalizeSolveArray(data.solves);
+
+    if (data.id === myId) {
         mySolves = solves;
         renderSolveList();
         updateStatsBar();
     }
+
     renderUser(data.id, data.name, "", solves, data.ao5);
 });
 
 socket.on("initState", (data) => {
     for (const id in data.names) {
-        const solves = (data.solves[id]||[]).map(Number);
-        if (data.names[id] === myName) {
+        const solves = normalizeSolveArray(data.solves[id]);
+
+        if (id === myId) {
             mySolves = solves;
             renderSolveList();
             updateStatsBar();
         }
-        renderUser(id, data.names[id], data.scrambles[id]||"", solves, calcAoN(solves,5));
+
+        renderUser(
+            id,
+            data.names[id],
+            data.scrambles[id] || "",
+            solves,
+            calcAoN(solves, 5)
+        );
     }
 });
 
@@ -283,10 +365,11 @@ function renderUser(id, name, scramble, solves, ao5) {
     const scr = scramble || el.dataset.scramble || "";
     el.dataset.scramble = scr;
 
-    const arr   = Array.isArray(solves) ? solves.map(Number) : [];
+    const arr   = Array.isArray(solves) ? normalizeSolveArray(solves) : [];
     const ao5v  = calcAoN(arr,5);
     const ao12v = calcAoN(arr,12);
-    const bestv = arr.length ? Math.min(...arr) : null;
+    const finiteArr = arr.filter(Number.isFinite);
+    const bestv = finiteArr.length ? Math.min(...finiteArr) : null;
 
     const recent = [...arr].reverse().slice(0,8);
     const rows = recent.length
@@ -329,23 +412,28 @@ function stop() {
     document.getElementById("penalty-btns").style.display = "flex"; // ← neu
     newScramble();
 }
+
 function applyPenalty(type) {
     if (!mySolves.length) return;
+
     document.getElementById("penalty-btns").style.display = "none";
-    if (type === '+2') {
-        mySolves[mySolves.length - 1] = parseFloat((mySolves[mySolves.length - 1] + 2).toFixed(2));
-    } else {
-        mySolves[mySolves.length - 1] = Infinity; // DNF intern als Infinity
-    }
-    renderSolveList();
-    updateStatsBar();
+
+    socket.emit("updateLastSolve", { type });
 }
 function deleteSolve(i) {
     if (!confirm(`Solve #${i+1} löschen?`)) return;
-    mySolves.splice(i, 1);
-    renderSolveList();
-    updateStatsBar();
+    socket.emit("deleteSolve", { index: i });
 }
+
+document.getElementById("solve-list").addEventListener("contextmenu", (e) => {
+    const row = e.target.closest(".solve-row");
+    if (!row || !e.currentTarget.contains(row)) return;
+    e.preventDefault();
+    const idx = parseInt(row.dataset.solveIndex, 10);
+    if (!Number.isInteger(idx) || idx < 0) return;
+    deleteSolve(idx);
+});
+
 document.addEventListener("keydown", (e) => {
     if (e.code !== "Space" || e.repeat) return;
     e.preventDefault();

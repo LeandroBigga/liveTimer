@@ -10,6 +10,22 @@ app.use(express.static("public"));
 
 const rooms = {};
 
+function calcAoN(arr, n) {
+    if (!Array.isArray(arr) || arr.length < n) return null;
+
+    // WCA-style trimmed mean: drop one best and one worst. Ties: earliest attempt
+    // among equals is "best", latest is "worst" (sort by time, then by attempt order).
+    const seg = arr.slice(-n);
+    const indexed = seg.map((t, i) => ({ t, i }));
+    indexed.sort((a, b) => (a.t !== b.t ? a.t - b.t : a.i - b.i));
+    const middle = indexed.slice(1, -1).map((x) => x.t);
+    // Keep Infinity as DNF: if any remaining counted solve is DNF, average is DNF.
+    if (middle.some((v) => !Number.isFinite(v))) return Infinity;
+
+    const sum = middle.reduce((a, b) => a + b, 0);
+    return +(sum / middle.length).toFixed(2);
+}
+
 io.on("connection", (socket) => {
 
     // ---------------- JOIN ----------------
@@ -71,13 +87,75 @@ console.log("solveEnd empfangen:", time, "| room:", socket.data.roomId);
 
     
 
-    const ao5 = calcAO5(userSolves);
+    const ao5 = calcAoN(userSolves, 5);
 
     io.to(room).emit("solveUpdate", {
         id: socket.id,
         name: socket.data.name,
         time: t,
         solves: [...userSolves],   // 👈 WICHTIG
+        ao5
+    });
+});
+// ---------------- PENALTY UPDATE ----------------
+socket.on("updateLastSolve", (data) => {
+    const room = socket.data.roomId;
+    if (!room) return;
+
+    const userSolves = rooms[room].solves[socket.id];
+    if (!userSolves || !userSolves.length) return;
+
+    let last = userSolves.length - 1;
+
+    if (data.type === "+2") {
+        userSolves[last] = +(userSolves[last] + 2).toFixed(2);
+    } else if (data.type === "DNF") {
+        userSolves[last] = Infinity;
+    }
+
+    const ao5 = calcAoN(userSolves, 5);
+
+    io.to(room).emit("solveUpdate", {
+        id: socket.id,
+        name: socket.data.name,
+        solves: [...userSolves],
+        ao5
+    });
+});
+
+// ---------------- CLEAR SOLVES ----------------
+socket.on("clearSolves", () => {
+    const room = socket.data.roomId;
+    if (!room || !rooms[room]) return;
+
+    rooms[room].solves[socket.id] = [];
+
+    io.to(room).emit("solveUpdate", {
+        id: socket.id,
+        name: socket.data.name,
+        solves: [],
+        ao5: null
+    });
+});
+
+// ---------------- DELETE SOLVE ----------------
+socket.on("deleteSolve", ({ index }) => {
+    const room = socket.data.roomId;
+    if (!room || !rooms[room]) return;
+
+    const userSolves = rooms[room].solves[socket.id];
+    if (!Array.isArray(userSolves) || userSolves.length === 0) return;
+
+    const i = Number(index);
+    if (!Number.isInteger(i) || i < 0 || i >= userSolves.length) return;
+
+    userSolves.splice(i, 1);
+    const ao5 = calcAoN(userSolves, 5);
+
+    io.to(room).emit("solveUpdate", {
+        id: socket.id,
+        name: socket.data.name,
+        solves: [...userSolves],
         ao5
     });
 });
@@ -102,18 +180,5 @@ console.log("solveEnd empfangen:", time, "| room:", socket.data.roomId);
 
 });
 
-
-// ---------------- AO5 FIX ----------------
-function calcAO5(arr) {
-    if (arr.length < 5) return null;
-
-    const last5 = arr.slice(-5).sort((a, b) => a - b);
-
-    const middle = last5.slice(1, 4);
-
-    const sum = middle.reduce((a, b) => a + b, 0);
-
-    return +(sum / 3).toFixed(2);
-}
 
 server.listen(3000, () => console.log("running"));
