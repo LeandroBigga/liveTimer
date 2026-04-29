@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Live Timer</title>
+</head>
+<body>
+
+<h1>Dein Timer</h1>
+<h1 id="timer">0.00</h1>
+<button onclick="start()">Start</button>
+<button onclick="stop()">Stop</button>
+
+<h1>Live (anderer User)</h1>
+<h1 id="live">0.00</h1>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+const socket = io();
+
+let startTime = 0;
+let interval = null;
+let running = false;
+
+function start() {
+    if (running) return;
+
+    running = true;
+    startTime = Date.now();
+
+    interval = setInterval(() => {
+        const time = ((Date.now() - startTime) / 1000).toFixed(2);
+        document.getElementById("timer").textContent = time;
+
+        socket.emit("timeUpdate", time); // 👈 senden
+    }, 50);
+}
+
+function stop() {
+    if (!running) return;
+
+    running = false;
+    clearInterval(interval);
+    interval = null;
+}
+
+// 👇 empfangen
+socket.on("timeUpdate", (time) => {
+    document.getElementById("live").textContent = time;
+});
+</script>
+
+</body>
+</html>
