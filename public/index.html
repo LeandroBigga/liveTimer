@@ -155,6 +155,15 @@ function getRoomFromQuery() {
     }
 }
 
+function setRoomInAddressBar(room) {
+    const params = new URLSearchParams(location.search);
+    params.set("room", room);
+    params.delete("r");
+    const qs = params.toString();
+    const url = qs ? `${location.pathname}?${qs}${location.hash}` : `${location.pathname}${location.hash}`;
+    history.replaceState(null, "", url);
+}
+
 function doJoinRoom(room, name) {
     const n = (name || "").trim();
     if (!room || !n) return;
@@ -163,6 +172,7 @@ function doJoinRoom(room, name) {
         localStorage.setItem(STORAGE_NAME_KEY, n);
     } catch (e) {}
     document.getElementById("roomInput").value = room;
+    setRoomInAddressBar(room);
     socket.emit("joinRoom", { roomId: room, name: n });
     document.getElementById("roomStatus").textContent = room + " | " + n;
     document.getElementById("users").innerHTML = "";
