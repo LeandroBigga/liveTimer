@@ -10,6 +10,32 @@ app.use(express.static("public"));
 
 const rooms = {};
 
+function getActiveRoomsSummary() {
+    const out = [];
+    const adapterRooms = io.sockets.adapter.rooms; // Map<string, Set<string>>
+
+    for (const roomId of Object.keys(rooms)) {
+        const members = adapterRooms.get(roomId);
+        if (!members || members.size === 0) {
+            delete rooms[roomId];
+            continue;
+        }
+        const names = rooms[roomId].names || {};
+        const users = [];
+        for (const sid of members) {
+            users.push(names[sid] || "Anonymous");
+        }
+        out.push({ roomId, userCount: members.size, users: users.sort((a, b) => a.localeCompare(b)) });
+    }
+
+    out.sort((a, b) => b.userCount - a.userCount || a.roomId.localeCompare(b.roomId));
+    return out;
+}
+
+function broadcastRoomsChanged() {
+    io.emit("roomsChanged", { rooms: getActiveRoomsSummary() });
+}
+
 function calcAoN(arr, n) {
     if (!Array.isArray(arr) || arr.length < n) return null;
 
@@ -31,30 +57,53 @@ io.on("connection", (socket) => {
     // ---------------- JOIN ----------------
     socket.on("joinRoom", ({ roomId, name }) => {
 
-        socket.join(roomId);
+        const nextRoomId = (roomId || "").trim();
+        if (!nextRoomId) return;
 
-        socket.data.roomId = roomId;
+        // If user was in a previous room, leave it and clean up server state.
+        const prevRoom = socket.data.roomId;
+        if (prevRoom && prevRoom !== nextRoomId && rooms[prevRoom]) {
+            socket.leave(prevRoom);
+            delete rooms[prevRoom].scrambles[socket.id];
+            delete rooms[prevRoom].names[socket.id];
+            delete rooms[prevRoom].solves[socket.id];
+            io.to(prevRoom).emit("removeUser", socket.id);
+
+            const stillMembers = io.sockets.adapter.rooms.get(prevRoom);
+            if (!stillMembers || stillMembers.size === 0) delete rooms[prevRoom];
+        }
+
+        socket.join(nextRoomId);
+
+        socket.data.roomId = nextRoomId;
         socket.data.name = name || "Anonymous";
 
-        if (!rooms[roomId]) {
-            rooms[roomId] = {
+        if (!rooms[nextRoomId]) {
+            rooms[nextRoomId] = {
                 scrambles: {},
                 names: {},
                 solves: {} // array pro user
             };
         }
 
-        if (!rooms[roomId].solves[socket.id]) {
-            rooms[roomId].solves[socket.id] = [];
+        if (!rooms[nextRoomId].solves[socket.id]) {
+            rooms[nextRoomId].solves[socket.id] = [];
         }
 
-        rooms[roomId].names[socket.id] = socket.data.name;
+        rooms[nextRoomId].names[socket.id] = socket.data.name;
 
         socket.emit("initState", {
-            scrambles: rooms[roomId].scrambles,
-            names: rooms[roomId].names,
-            solves: rooms[roomId].solves
+            scrambles: rooms[nextRoomId].scrambles,
+            names: rooms[nextRoomId].names,
+            solves: rooms[nextRoomId].solves
         });
+
+        broadcastRoomsChanged();
+    });
+
+    // ---------------- LIST ROOMS ----------------
+    socket.on("listRooms", () => {
+        socket.emit("roomsList", { rooms: getActiveRoomsSummary() });
     });
 
     // ---------------- SCRAMBLE ----------------
@@ -159,6 +208,29 @@ socket.on("deleteSolve", ({ index }) => {
         ao5
     });
 });
+
+// ---------------- SYNC SOLVES (from localStorage) ----------------
+socket.on("syncSolves", ({ solves }) => {
+    const room = socket.data.roomId;
+    if (!room || !rooms[room]) return;
+    if (!Array.isArray(solves)) return;
+
+    // JSON can't represent Infinity; client may send null for DNF.
+    const normalized = solves
+        .slice(0, 1000)
+        .map((v) => (v === null ? Infinity : parseFloat(v)))
+        .filter((v) => Number.isFinite(v) || v === Infinity);
+
+    rooms[room].solves[socket.id] = normalized;
+    const ao5 = calcAoN(normalized, 5);
+
+    io.to(room).emit("solveUpdate", {
+        id: socket.id,
+        name: socket.data.name,
+        solves: [...normalized],
+        ao5
+    });
+});
     socket.on("timeUpdate", (time) => {
         const room = socket.data.roomId;
         if (!room) return;
@@ -175,6 +247,10 @@ socket.on("deleteSolve", ({ index }) => {
         delete rooms[room].solves[socket.id];
 
         io.to(room).emit("removeUser", socket.id);
+
+        const members = io.sockets.adapter.rooms.get(room);
+        if (!members || members.size === 0) delete rooms[room];
+        broadcastRoomsChanged();
     });
     
 

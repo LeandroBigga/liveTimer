@@ -13,6 +13,17 @@
         #topbar button.danger { border-color: #622; color: #e06060; }
         #topbar button.danger:hover { background: #2a1515; }
         #roomStatus { font-size: 13px; color: #888; margin-left: auto; }
+        #roomsPanel { position: absolute; top: 44px; left: 16px; width: 360px; max-width: calc(100vw - 32px); background: #141414; border: 1px solid #2a2a2a; border-radius: 10px; padding: 10px; box-shadow: 0 12px 32px rgba(0,0,0,0.45); display: none; z-index: 50; }
+        #roomsPanelHeader { display: flex; justify-content: space-between; align-items: center; padding: 4px 4px 10px; }
+        #roomsPanelHeader b { color: #c0c0c0; font-size: 12px; letter-spacing: 1px; text-transform: uppercase; }
+        #roomsPanelHeader button { padding: 4px 10px; font-size: 12px; }
+        .roomItem { border: 1px solid #222; border-radius: 8px; padding: 10px 10px; background: #111; margin-bottom: 8px; cursor: pointer; }
+        .roomItem:hover { background: #151515; border-color: #2a2a2a; }
+        .roomTop { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+        .roomCode { font-family: 'Courier New', monospace; font-size: 14px; color: #e0e0e0; }
+        .roomCount { font-size: 12px; color: #777; }
+        .roomUsers { margin-top: 6px; font-size: 12px; color: #777; line-height: 1.4; }
+        .roomUsers span { color: #aaa; }
         #main { display: flex; height: calc(100vh - 43px); }
         #sidebar { width: 300px; min-width: 220px; background: #141414; border-right: 1px solid #2a2a2a; display: flex; flex-direction: column; overflow: hidden; }
         #stats-bar { background: #111; border-bottom: 1px solid #2a2a2a; padding: 8px 12px; display: flex; gap: 0; }
@@ -40,6 +51,8 @@
         #timer { font-size: 150px; font-weight: bold; font-family: 'Courier New', monospace; color: #e0e0e0; transition: color 0.15s; letter-spacing: -3px; line-height: 1; }
         #timer.arming { color: #e05050; }
         #timer.ready  { color: #50e050; }
+        #current-ao5 { margin-top: 6px; font-size: 16px; font-family: 'Courier New', monospace; color: #777; min-height: 20px; }
+        #current-ao5 b { color: #c0c0c0; font-weight: 700; }
         #hint { font-size: 11px; color: #383838; text-transform: uppercase; letter-spacing: 2px; }
         #rightpanel { width: 240px; min-width: 180px; background: #141414; border-left: 1px solid #2a2a2a; display: flex; flex-direction: column; overflow: hidden; }
         #rightpanel-header { background: #1e1e1e; border-bottom: 1px solid #2a2a2a; padding: 8px 12px; font-size: 10px; color: #555; text-transform: uppercase; letter-spacing: 1px; }
@@ -62,9 +75,22 @@
     <h1>Room Timer</h1>
     <input id="roomInput" placeholder="Room Code" />
     <button onclick="joinRoom()">Join Room</button>
+    <button id="btn-rooms" onclick="toggleRoomsPanel()">Räume</button>
     <button onclick="newScramble()">New Scramble</button>
     <button class="danger" id="btn-clear" onclick="clearSolves()" style="display:none">Clear</button>
+    <button id="btn-copy-link" onclick="copyRoomLink()" style="display:none">Link kopieren</button>
     <span id="roomStatus">Kein Room</span>
+</div>
+
+<div id="roomsPanel">
+    <div id="roomsPanelHeader">
+        <b>Offene Räume</b>
+        <div style="display:flex; gap:8px;">
+            <button onclick="createNewRoom()">Neuer Room</button>
+            <button onclick="refreshRoomsList()">Refresh</button>
+        </div>
+    </div>
+    <div id="roomsList" style="max-height: 60vh; overflow:auto; padding-right: 2px;"></div>
 </div>
 
 <div id="main">
@@ -88,6 +114,7 @@
     <div id="center">
         <div id="scramble-display">–</div>
         <div id="timer">0.00</div>
+        <div id="current-ao5"></div>
         <div id="hint">Leertaste halten → loslassen zum Starten</div>
         <div id="penalty-btns" style="display:none; gap:8px;">
     <button onclick="applyPenalty('+2')" style="background:#2a2a2a;border:1px solid #f0c060;color:#f0c060;padding:5px 16px;border-radius:4px;cursor:pointer;font-size:13px;">+2</button>
@@ -113,11 +140,14 @@ socket.on("connect", () => {
 let myId = null;
 let mySolves = [];
 let myName   = "";
+let currentRoom = "";
 let running  = false;
 let armed    = false;
 let startTime = 0;
 let interval  = null;
 let holdTimer = null;
+let pendingLocalSolvesRaw = null;
+let lastRoomsList = [];
 
 function generateWCAScramble() {
     const axes = { X:["R","L"], Y:["U","D"], Z:["F","B"] };
@@ -143,6 +173,29 @@ function newScramble() {
 }
 
 const STORAGE_NAME_KEY = "livetimer_display_name";
+const STORAGE_SOLVES_PREFIX = "livetimer_room_solves__";
+
+function roomSolvesKey(room) {
+    return STORAGE_SOLVES_PREFIX + String(room || "");
+}
+
+function loadRoomSolvesRaw(room) {
+    try {
+        const raw = localStorage.getItem(roomSolvesKey(room));
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : null;
+    } catch (e) {
+        return null;
+    }
+}
+
+function saveRoomSolvesRaw(room, solvesRaw) {
+    if (!room) return;
+    try {
+        localStorage.setItem(roomSolvesKey(room), JSON.stringify(solvesRaw || []));
+    } catch (e) {}
+}
 
 function getRoomFromQuery() {
     const q = new URLSearchParams(location.search);
@@ -167,16 +220,136 @@ function setRoomInAddressBar(room) {
 function doJoinRoom(room, name) {
     const n = (name || "").trim();
     if (!room || !n) return;
+    currentRoom = room;
     myName = n;
     try {
         localStorage.setItem(STORAGE_NAME_KEY, n);
     } catch (e) {}
     document.getElementById("roomInput").value = room;
     setRoomInAddressBar(room);
+
+    // Load local solves immediately (so UI isn't empty on fresh server restart),
+    // then sync them to server after join.
+    pendingLocalSolvesRaw = loadRoomSolvesRaw(room);
+    if (pendingLocalSolvesRaw && pendingLocalSolvesRaw.length) {
+        mySolves = normalizeSolveArray(pendingLocalSolvesRaw);
+        renderSolveList();
+        updateStatsBar();
+    }
+
     socket.emit("joinRoom", { roomId: room, name: n });
     document.getElementById("roomStatus").textContent = room + " | " + n;
     document.getElementById("users").innerHTML = "";
     document.getElementById("btn-clear").style.display = "inline-block";
+    document.getElementById("btn-copy-link").style.display = "inline-block";
+}
+
+function joinFromRoomCode(room) {
+    const r = String(room || "").trim();
+    if (!r) return;
+    document.getElementById("roomInput").value = r;
+    let stored = "";
+    try {
+        stored = localStorage.getItem(STORAGE_NAME_KEY) || "";
+    } catch (e) {}
+    if (stored && stored.trim()) {
+        doJoinRoom(r, stored.trim());
+        return;
+    }
+    const name = prompt("Dein Name:", "");
+    if (name && name.trim()) doJoinRoom(r, name.trim());
+}
+
+function generateRoomCode(len = 6) {
+    const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no I,O,0,1
+    let out = "";
+    for (let i = 0; i < len; i++) {
+        out += alphabet[Math.floor(Math.random() * alphabet.length)];
+    }
+    return out;
+}
+
+function createNewRoom() {
+    // Small UX: prefill unique-ish code; user can edit if they want.
+    const suggestion = generateRoomCode(6);
+    const room = prompt("Room Code:", suggestion);
+    if (!room || !room.trim()) return;
+    joinFromRoomCode(room.trim());
+    const panel = document.getElementById("roomsPanel");
+    if (panel) panel.style.display = "none";
+}
+
+function renderRoomsList(rooms) {
+    lastRoomsList = Array.isArray(rooms) ? rooms : [];
+    const el = document.getElementById("roomsList");
+    if (!el) return;
+    if (!lastRoomsList.length) {
+        el.innerHTML = '<div style="color:#444;font-size:12px;padding:10px 6px;">Keine offenen Räume</div>';
+        return;
+    }
+    el.innerHTML = lastRoomsList.map((r) => {
+        const users = Array.isArray(r.users) ? r.users : [];
+        const usersHtml = users.length
+            ? users.slice(0, 12).map((u) => `<span>${String(u).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;")}</span>`).join(", ")
+            : "<span>–</span>";
+        const more = users.length > 12 ? ` <span style="color:#666">(+${users.length - 12})</span>` : "";
+        const roomIdSafe = String(r.roomId).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;");
+        return `
+        <div class="roomItem" data-roomid="${roomIdSafe}">
+            <div class="roomTop">
+                <div class="roomCode">${roomIdSafe}</div>
+                <div class="roomCount">${r.userCount || users.length} User</div>
+            </div>
+            <div class="roomUsers">${usersHtml}${more}</div>
+        </div>`;
+    }).join("");
+}
+
+function refreshRoomsList() {
+    socket.emit("listRooms");
+}
+
+function toggleRoomsPanel() {
+    const panel = document.getElementById("roomsPanel");
+    if (!panel) return;
+    const open = panel.style.display !== "none";
+    panel.style.display = open ? "none" : "block";
+    if (!open) refreshRoomsList();
+}
+
+document.getElementById("roomsList").addEventListener("click", (e) => {
+    const item = e.target.closest(".roomItem");
+    if (!item) return;
+    const roomId = item.dataset.roomid || "";
+    joinFromRoomCode(roomId);
+});
+
+document.addEventListener("click", (e) => {
+    const panel = document.getElementById("roomsPanel");
+    const btn = document.getElementById("btn-rooms");
+    if (!panel || !btn) return;
+    if (panel.style.display === "none") return;
+    if (panel.contains(e.target) || btn.contains(e.target)) return;
+    panel.style.display = "none";
+});
+
+async function copyRoomLink() {
+    const btn = document.getElementById("btn-copy-link");
+    const url = location.href;
+    try {
+        if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+            await navigator.clipboard.writeText(url);
+        } else {
+            // Fallback
+            prompt("Link kopieren:", url);
+            return;
+        }
+        const old = btn.textContent;
+        btn.textContent = "Kopiert!";
+        setTimeout(() => (btn.textContent = old), 1200);
+    } catch (e) {
+        prompt("Link kopieren:", url);
+    }
 }
 
 function joinRoom() {
@@ -308,6 +481,14 @@ function updateStatsBar() {
     document.getElementById("stat-ao50").textContent = fmt(ao50);
     document.getElementById("stat-best").textContent = fmt(best);
     document.getElementById("stat-mean").textContent = fmt(mean);
+
+    const ao5El = document.getElementById("current-ao5");
+    if (!ao5El) return;
+    if (!running && mySolves.length >= 5) {
+        ao5El.innerHTML = `AO5: <b>${fmt(ao5)}</b>`;
+    } else {
+        ao5El.textContent = "";
+    }
 }
 
 socket.on("timeUpdate", (data) => {
@@ -332,6 +513,7 @@ socket.on("solveUpdate", (data) => {
         mySolves = solves;
         renderSolveList();
         updateStatsBar();
+        if (currentRoom) saveRoomSolvesRaw(currentRoom, Array.isArray(data.solves) ? data.solves : []);
     }
 
     renderUser(data.id, data.name, "", solves, data.ao5);
@@ -342,9 +524,20 @@ socket.on("initState", (data) => {
         const solves = normalizeSolveArray(data.solves[id]);
 
         if (id === myId) {
-            mySolves = solves;
-            renderSolveList();
-            updateStatsBar();
+            // If server has none (memory reset) but we loaded some from localStorage,
+            // keep local and sync it back to server once.
+            if (Array.isArray(data.solves[id]) && data.solves[id].length === 0 && pendingLocalSolvesRaw && pendingLocalSolvesRaw.length) {
+                mySolves = normalizeSolveArray(pendingLocalSolvesRaw);
+                renderSolveList();
+                updateStatsBar();
+                socket.emit("syncSolves", { solves: pendingLocalSolvesRaw });
+            } else {
+                mySolves = solves;
+                renderSolveList();
+                updateStatsBar();
+                if (currentRoom) saveRoomSolvesRaw(currentRoom, Array.isArray(data.solves[id]) ? data.solves[id] : []);
+            }
+            pendingLocalSolvesRaw = null;
         }
 
         renderUser(
@@ -360,6 +553,17 @@ socket.on("initState", (data) => {
 socket.on("removeUser", (id) => {
     const el = document.getElementById("u_"+id);
     if (el) el.remove();
+});
+
+socket.on("roomsList", (data) => {
+    renderRoomsList(data && data.rooms);
+});
+
+socket.on("roomsChanged", (data) => {
+    const panel = document.getElementById("roomsPanel");
+    if (panel && panel.style.display !== "none") {
+        renderRoomsList(data && data.rooms);
+    }
 });
 
 function renderUser(id, name, scramble, solves, ao5) {
