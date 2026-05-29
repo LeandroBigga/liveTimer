@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html>
 <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Room Timer</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -58,6 +60,11 @@
         #rightpanel-header { background: #1e1e1e; border-bottom: 1px solid #2a2a2a; padding: 8px 12px; font-size: 10px; color: #555; text-transform: uppercase; letter-spacing: 1px; }
         #users { flex: 1; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 8px; }
         .box { background: #1e1e1e; border: 1px solid #2a2a2a; border-radius: 6px; padding: 10px 12px; }
+        .box-title-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+        .box-title-row b { font-size: 13px; color: #ccc; margin-bottom: 0; }
+        .race-badge { font-size: 10px; padding: 2px 6px; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; flex-shrink: 0; }
+        .race-badge.race-on { background: #1a3a1a; color: #8f8; border: 1px solid #4a8; }
+        .race-badge.race-off { background: #222; color: #666; border: 1px solid #333; }
         .box b { font-size: 13px; color: #ccc; display: block; margin-bottom: 4px; }
         .box .scramble-text { font-size: 10px; color: #484848; word-break: break-all; line-height: 1.4; margin-bottom: 6px; }
         .box-stats { display: flex; gap: 6px; margin-bottom: 6px; }
@@ -67,18 +74,96 @@
         .box-solve-row { display: flex; justify-content: space-between; padding: 2px 0; border-bottom: 1px solid #252525; color: #555; font-family: 'Courier New', monospace; }
         .box-solve-row:first-child { color: #999; }
         .box-num { color: #383838; }
+        #topbar button.active { background: #1a3a1a; border-color: #4a8; color: #8f8; }
+        #topbar button.host-only { border-color: #48a; color: #7ab8e8; }
+        #race-status { font-size: 12px; color: #888; width: 100%; text-align: center; }
+        #race-controls { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; align-items: center; }
+        #race-controls button { background: #2a2a2a; border: 1px solid #555; color: #ccc; padding: 8px 18px; border-radius: 4px; cursor: pointer; font-size: 14px; }
+        #race-controls button:hover { background: #333; }
+        #race-controls button.ready-on { background: #1a3a1a; border-color: #4a8; color: #8f8; }
+        #race-controls button:disabled { opacity: 0.4; cursor: not-allowed; }
+        #race-banner { font-size: 15px; color: #f0c060; min-height: 22px; text-align: center; }
+        #race-results { display: none; width: 100%; max-width: 420px; background: #141414; border: 1px solid #2a2a2a; border-radius: 8px; padding: 14px 16px; }
+        #race-results h3 { font-size: 12px; color: #666; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; font-weight: normal; }
+        .race-place { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #222; font-family: 'Courier New', monospace; font-size: 14px; }
+        .race-place:last-child { border-bottom: none; }
+        .race-place .place { color: #f0c060; width: 28px; }
+        .race-place .pname { color: #ccc; flex: 1; }
+        .race-place .ptime { color: #7ab8e8; }
+        #race-countdown { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 100; align-items: center; justify-content: center; font-size: 120px; font-weight: bold; font-family: 'Courier New', monospace; color: #7ab8e8; pointer-events: none; flex-direction: column; gap: 12px; }
+        #race-countdown .inspection-sub { font-size: 18px; color: #888; letter-spacing: 2px; text-transform: uppercase; }
+        #inspection-hint { font-size: 14px; color: #f0c060; text-align: center; min-height: 20px; font-weight: bold; }
+        #inspection-display { display: none; text-align: center; padding: 8px 16px; border-radius: 8px; background: #1a2a3a; border: 1px solid #3a5a7a; margin: 4px 0; }
+        #inspection-display.penalty-phase { background: #2a2418; border-color: #7a6a3a; }
+        #inspection-display .insp-num { font-size: 48px; font-weight: bold; font-family: 'Courier New', monospace; color: #7ab8e8; line-height: 1.1; }
+        #inspection-display.penalty-phase .insp-num { color: #f0c060; }
+        #inspection-display .insp-label { font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 2px; margin-top: 4px; }
+        #race-status.inspection-active { font-size: 15px; font-weight: bold; color: #7ab8e8; }
+        #race-status.penalty-active { color: #f0c060; }
+        #topbar-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+        #room-actions { display: none; flex-direction: column; gap: 8px; padding: 0 8px 10px; border-bottom: 1px solid #2a2a2a; }
+        #room-actions button { width: 100%; min-height: 44px; font-size: 14px; padding: 10px 14px; }
+        #touch-zone { display: none; width: 100%; max-width: 360px; min-height: 120px; margin-top: 8px; border: 2px dashed #333; border-radius: 12px; background: rgba(255,255,255,0.03); touch-action: manipulation; user-select: none; -webkit-user-select: none; align-items: center; justify-content: center; flex-direction: column; gap: 6px; cursor: pointer; }
+        #touch-zone.arming { border-color: #e05050; background: rgba(224,80,80,0.08); }
+        #touch-zone.ready { border-color: #50e050; background: rgba(80,224,80,0.08); }
+        #touch-zone.running { border-color: #555; border-style: solid; }
+        #touch-zone-label { font-size: 13px; color: #666; text-transform: uppercase; letter-spacing: 1px; text-align: center; padding: 0 12px; }
+        #bottom-tabs { display: none; position: fixed; bottom: 0; left: 0; right: 0; z-index: 60; background: #111; border-top: 1px solid #333; padding-bottom: env(safe-area-inset-bottom, 0); }
+        #bottom-tabs button { flex: 1; min-height: 48px; background: transparent; border: none; color: #666; font-size: 13px; cursor: pointer; padding: 10px 4px; }
+        #bottom-tabs button.active { color: #7ab8e8; box-shadow: inset 0 -2px 0 #7ab8e8; }
+        #penalty-btns { display: none; gap: 8px; flex-wrap: wrap; justify-content: center; }
+        #penalty-btns button { min-height: 44px; min-width: 72px; padding: 10px 20px !important; font-size: 14px !important; }
+        @media (max-width: 768px) {
+            #topbar { padding: 8px 10px; gap: 8px; }
+            #topbar h1.topbar-title { font-size: 14px; margin-right: 0; width: 100%; }
+            #roomInput { flex: 1; min-width: 0; width: auto; min-height: 44px; font-size: 16px; }
+            #topbar > button { min-height: 44px; padding: 8px 14px; }
+            #roomStatus { margin-left: 0; width: 100%; font-size: 12px; order: 10; }
+            #topbar-actions { display: none !important; }
+            #main { flex-direction: column; height: calc(100vh - 52px - 48px - env(safe-area-inset-bottom, 0px)); height: calc(100dvh - 52px - 48px - env(safe-area-inset-bottom, 0px)); overflow: hidden; }
+            #main.view-timer #center { display: flex; flex: 1; min-height: 0; overflow-y: auto; padding: 16px 12px 20px; gap: 12px; }
+            #main.view-solves #sidebar { display: flex; flex: 1; width: 100%; min-width: 0; min-height: 0; }
+            #main.view-room #rightpanel { display: flex; flex: 1; width: 100%; min-width: 0; min-height: 0; }
+            #sidebar, #center, #rightpanel { display: none; }
+            #timer { font-size: clamp(64px, 22vw, 96px); letter-spacing: -2px; }
+            #scramble-display { font-size: 17px; line-height: 1.6; padding: 0 4px; }
+            #hint { font-size: 10px; }
+            #touch-zone { display: flex; }
+            #bottom-tabs { display: flex; }
+            #room-actions.in-room { display: flex; }
+            #sidebar-header, .solve-row { grid-template-columns: 22px minmax(52px, 1fr) 40px 40px 38px; font-size: 10px; padding: 6px 8px; gap: 2px; }
+            #sidebar-header span { font-size: 9px; }
+            .stat-label { font-size: 9px; }
+            .stat-val { font-size: 11px; }
+            #stats-bar { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; }
+            .stat-item { min-width: 52px; flex: 0 0 auto; }
+            #race-countdown { font-size: 80px; }
+            #roomsPanel { left: 8px; right: 8px; width: auto; max-width: none; }
+            #race-controls button { min-height: 44px; min-width: 120px; }
+            #center { justify-content: flex-start; }
+        }
+        @media (min-width: 769px) {
+            #room-actions { display: none !important; }
+            #bottom-tabs { display: none !important; }
+            #touch-zone { display: none !important; }
+        }
     </style>
 </head>
 <body>
 
 <div id="topbar">
-    <h1>Room Timer</h1>
+    <h1 class="topbar-title">Room Timer</h1>
     <input id="roomInput" placeholder="Room Code" />
-    <button onclick="joinRoom()">Join Room</button>
-    <button id="btn-rooms" onclick="toggleRoomsPanel()">Räume</button>
-    <button onclick="newScramble()">New Scramble</button>
-    <button class="danger" id="btn-clear" onclick="clearSolves()" style="display:none">Clear</button>
-    <button id="btn-copy-link" onclick="copyRoomLink()" style="display:none">Link kopieren</button>
+    <button type="button" onclick="joinRoom()">Join</button>
+    <button type="button" id="btn-rooms" onclick="toggleRoomsPanel()">Räume</button>
+    <div id="topbar-actions">
+        <button type="button" onclick="newScramble()" id="btn-new-scramble">New Scramble</button>
+        <button type="button" id="btn-race-mode" onclick="toggleRaceMode()" style="display:none">Race Mode</button>
+        <button type="button" class="danger" id="btn-clear" onclick="clearSolves()" style="display:none">Clear</button>
+        <button type="button" id="btn-copy-link" onclick="copyRoomLink()" style="display:none">Link kopieren</button>
+        <button type="button" id="btn-next-round" class="host-only" onclick="nextRound()" style="display:none">Nächste Runde</button>
+        <button type="button" id="btn-end-round" class="host-only danger" onclick="endRound()" style="display:none">Runde beenden</button>
+    </div>
     <span id="roomStatus">Kein Room</span>
 </div>
 
@@ -93,7 +178,7 @@
     <div id="roomsList" style="max-height: 60vh; overflow:auto; padding-right: 2px;"></div>
 </div>
 
-<div id="main">
+<div id="main" class="view-timer">
 
     <div id="sidebar">
         <div id="stats-bar">
@@ -112,18 +197,31 @@
     </div>
 
     <div id="center">
+        <div id="race-banner"></div>
         <div id="scramble-display">–</div>
+        <div id="inspection-display">
+            <div class="insp-num" id="inspection-seconds-inline">15</div>
+            <div class="insp-label" id="inspection-label-inline">Inspektion</div>
+        </div>
         <div id="timer">0.00</div>
         <div id="current-ao5"></div>
+        <div id="inspection-hint"></div>
+        <div id="race-status"></div>
+        <div id="race-controls" style="display:none"></div>
+        <div id="race-results"></div>
+        <div id="touch-zone" aria-label="Timer">
+            <span id="touch-zone-label">Gedrückt halten, dann loslassen</span>
+        </div>
         <div id="hint">Leertaste halten → loslassen zum Starten</div>
-        <div id="penalty-btns" style="display:none; gap:8px;">
-    <button onclick="applyPenalty('+2')" style="background:#2a2a2a;border:1px solid #f0c060;color:#f0c060;padding:5px 16px;border-radius:4px;cursor:pointer;font-size:13px;">+2</button>
-    <button onclick="applyPenalty('DNF')" style="background:#2a2a2a;border:1px solid #e06060;color:#e06060;padding:5px 16px;border-radius:4px;cursor:pointer;font-size:13px;">DNF</button>
-</div>
+        <div id="penalty-btns">
+            <button type="button" onclick="applyPenalty('+2')" style="background:#2a2a2a;border:1px solid #f0c060;color:#f0c060;border-radius:4px;cursor:pointer;">+2</button>
+            <button type="button" onclick="applyPenalty('DNF')" style="background:#2a2a2a;border:1px solid #e06060;color:#e06060;border-radius:4px;cursor:pointer;">DNF</button>
+        </div>
     </div>
 
     <div id="rightpanel">
-        <div id="rightpanel-header">Room Users</div>
+        <div id="room-actions"></div>
+        <div id="rightpanel-header">Room Users · <span style="color:#8f8">Race</span> / <span style="color:#666">Solo</span></div>
         <div id="users">
             <div style="color:#333;font-size:12px;text-align:center;padding:24px;">Noch kein Room</div>
         </div>
@@ -131,11 +229,23 @@
 
 </div>
 
+<nav id="bottom-tabs" aria-label="Ansicht">
+    <button type="button" data-tab="timer" class="active">Timer</button>
+    <button type="button" data-tab="solves">Solves</button>
+    <button type="button" data-tab="room">Room</button>
+</nav>
+
+<div id="race-countdown">
+    <span id="inspection-seconds">15</span>
+    <span class="inspection-sub">Inspektion</span>
+</div>
+
 <script src="/socket.io/socket.io.js"></script>
 <script>
 const socket = io();
 socket.on("connect", () => {
     myId = socket.id;
+    if (raceStateCache) applyRaceState(raceStateCache);
 });
 let myId = null;
 let mySolves = [];
@@ -148,6 +258,21 @@ let interval  = null;
 let holdTimer = null;
 let pendingLocalSolvesRaw = null;
 let lastRoomsList = [];
+let myRaceEnabled = false;
+let raceHostId = null;
+let raceRound = {
+    phase: "idle",
+    scramble: null,
+    inspectionStartAt: null,
+    inspectionPenaltyAt: null,
+    inspectionDnfAt: null,
+    ready: {},
+    finishes: {},
+    rankings: null,
+};
+let inspectionInterval = null;
+let iAmReady = false;
+let lastRaceFinisherMsg = "";
 
 function generateWCAScramble() {
     const axes = { X:["R","L"], Y:["U","D"], Z:["F","B"] };
@@ -167,9 +292,373 @@ let myScramble = generateWCAScramble();
 document.getElementById("scramble-display").textContent = myScramble;
 
 function newScramble() {
+    if (myRaceEnabled && raceRound.scramble) return;
     myScramble = generateWCAScramble();
     document.getElementById("scramble-display").textContent = myScramble;
     socket.emit("scrambleUpdate", { scramble: myScramble });
+}
+
+function isRaceRoundActive() {
+    const p = raceRound.phase;
+    return p === "ready" || p === "solving";
+}
+
+function canToggleRaceModeNow() {
+    return raceRound.phase === "idle" || raceRound.phase === "results";
+}
+
+function raceParticipantCount() {
+    if (!raceStateCache || !raceStateCache.raceEnabled) return 0;
+    return Object.values(raceStateCache.raceEnabled).filter(Boolean).length;
+}
+
+let raceStateCache = null;
+const usersCache = {};
+
+function isUserInRace(id) {
+    return !!(raceStateCache && raceStateCache.raceEnabled && raceStateCache.raceEnabled[id]);
+}
+
+function raceBadgeHtml(id) {
+    if (!currentRoom) return "";
+    const on = isUserInRace(id);
+    return `<span class="race-badge ${on ? "race-on" : "race-off"}">${on ? "Race" : "Solo"}</span>`;
+}
+
+function refreshAllUsersFromCache() {
+    for (const id in usersCache) {
+        const u = usersCache[id];
+        renderUser(id, u.name, u.scramble, u.solves, u.ao5, true);
+    }
+}
+
+function applyRaceState(state) {
+    raceStateCache = state;
+    if (!state) return;
+    raceHostId = state.hostId;
+    myRaceEnabled = !!(state.raceEnabled && state.raceEnabled[myId]);
+    raceRound = state.round ? { ...state.round } : raceRound;
+    normalizeRaceRoundTimestamps();
+    iAmReady = !!(raceRound.ready && raceRound.ready[myId]);
+
+    if (myRaceEnabled && raceRound.scramble) {
+        myScramble = raceRound.scramble;
+        document.getElementById("scramble-display").textContent = myScramble;
+    }
+
+    updateRaceUI();
+    updateInspectionUI();
+    refreshAllUsersFromCache();
+}
+
+function updateRaceUI() {
+    const btnRace = document.getElementById("btn-race-mode");
+    const btnNext = document.getElementById("btn-next-round");
+    const btnEnd = document.getElementById("btn-end-round");
+    const btnScramble = document.getElementById("btn-new-scramble");
+    const controls = document.getElementById("race-controls");
+    const statusEl = document.getElementById("race-status");
+    const resultsEl = document.getElementById("race-results");
+    const hint = document.getElementById("hint");
+    const isHost = myId && raceHostId === myId;
+    const phase = raceRound.phase;
+
+    if (currentRoom) {
+        setToolbarBtnVisible(btnRace, true);
+        btnRace.classList.toggle("active", myRaceEnabled);
+        btnRace.textContent = myRaceEnabled ? "Race Mode: AN" : "Race Mode";
+        btnRace.disabled = !canToggleRaceModeNow();
+    } else {
+        setToolbarBtnVisible(btnRace, false);
+    }
+
+    setToolbarBtnVisible(btnNext, isHost && currentRoom && (phase === "idle" || phase === "results"));
+    setToolbarBtnVisible(
+        btnEnd,
+        isHost && currentRoom && (phase === "ready" || phase === "solving")
+    );
+
+    if (myRaceEnabled && isRaceRoundActive()) {
+        setToolbarBtnVisible(btnScramble, false);
+    } else {
+        setToolbarBtnVisible(btnScramble, !!currentRoom);
+    }
+
+    const btnClear = document.getElementById("btn-clear");
+    const btnCopy = document.getElementById("btn-copy-link");
+    setToolbarBtnVisible(btnClear, !!currentRoom);
+    setToolbarBtnVisible(btnCopy, !!currentRoom);
+
+    if (!myRaceEnabled || phase === "idle") {
+        controls.style.display = "none";
+        statusEl.textContent = myRaceEnabled && phase === "idle" ? "Warte auf „Nächste Runde“ (Host)" : "";
+        resultsEl.style.display = "none";
+        if (!isRaceRoundActive()) hint.style.display = "";
+        const inspHint = document.getElementById("inspection-hint");
+        if (inspHint) inspHint.textContent = "";
+        updateTouchZoneUI();
+        updateInspectionUI();
+        return;
+    }
+
+    controls.style.display = "flex";
+    resultsEl.style.display = phase === "results" ? "block" : "none";
+
+    if (phase === "ready") {
+        const readyCount = Object.keys(raceRound.ready || {}).filter((id) => raceStateCache.raceEnabled[id] && raceRound.ready[id]).length;
+        const total = raceParticipantCount();
+        statusEl.textContent = `${readyCount}/${total} Race-Teilnehmer ready`;
+        controls.innerHTML = `<button id="btn-race-ready" class="${iAmReady ? "ready-on" : ""}" onclick="toggleRaceReady()">${iAmReady ? "Ready ✓" : "Ready"}</button>`;
+        hint.textContent = "Drücke Ready wenn du bereit bist";
+        hint.style.display = "";
+    } else if (phase === "solving") {
+        const ids = Object.keys(raceStateCache.raceEnabled || {}).filter((id) => raceStateCache.raceEnabled[id]);
+        const done = ids.filter((id) => raceRound.finishes[id] && raceRound.finishes[id].done).length;
+        controls.innerHTML = "";
+        if (!isInspectionWindowActive()) {
+            statusEl.textContent = `Runde läuft · ${done}/${ids.length} fertig`;
+            statusEl.className = "";
+        }
+        hint.textContent = isMobileLayout()
+            ? "Halten & loslassen zum Starten"
+            : "Leertaste halten → loslassen zum Starten";
+        hint.style.display = "";
+    } else if (phase === "results") {
+        statusEl.textContent = "Ergebnis";
+        controls.innerHTML = "";
+        hint.style.display = "none";
+        const inspHint = document.getElementById("inspection-hint");
+        if (inspHint) inspHint.textContent = "";
+        renderRaceResults(raceRound.rankings);
+    }
+    updateTouchZoneUI();
+    updateInspectionUI();
+}
+
+function normalizeRaceRoundTimestamps() {
+    for (const k of ["inspectionStartAt", "inspectionPenaltyAt", "inspectionDnfAt"]) {
+        if (raceRound[k] != null && raceRound[k] !== "") {
+            raceRound[k] = Number(raceRound[k]);
+        }
+    }
+}
+
+function hasPersonalRaceStarted() {
+    if (!myId || !myRaceEnabled) return false;
+    const fin = raceRound.finishes && raceRound.finishes[myId];
+    return !!(fin && fin.started);
+}
+
+function isInspectionWindowActive() {
+    if (hasPersonalRaceStarted()) return false;
+    return (
+        currentRoom &&
+        myRaceEnabled &&
+        raceRound.phase === "solving" &&
+        raceRound.inspectionPenaltyAt &&
+        raceRound.inspectionDnfAt &&
+        Date.now() < raceRound.inspectionDnfAt
+    );
+}
+
+function markPersonalRaceStarted() {
+    if (!myId || !myRaceEnabled) return;
+    if (!raceRound.finishes) raceRound.finishes = {};
+    if (!raceRound.finishes[myId]) {
+        raceRound.finishes[myId] = { done: false, started: true, startPenalty: 0 };
+    } else {
+        raceRound.finishes[myId].started = true;
+    }
+}
+
+function getInspectionPhase() {
+    if (!isInspectionWindowActive()) return null;
+    const now = Date.now();
+    if (now < raceRound.inspectionPenaltyAt) {
+        return {
+            kind: "inspection",
+            sec: Math.ceil((raceRound.inspectionPenaltyAt - now) / 1000),
+            label: "Inspektion",
+            hint: "Du kannst jetzt starten",
+        };
+    }
+    if (now < raceRound.inspectionDnfAt) {
+        return {
+            kind: "penalty",
+            sec: Math.ceil((raceRound.inspectionDnfAt - now) / 1000),
+            label: "+2 bei Start",
+            hint: "DNF wenn du nicht startest",
+        };
+    }
+    return null;
+}
+
+function getInspectionStatusText() {
+    const p = getInspectionPhase();
+    if (!p) return "";
+    if (p.kind === "inspection") return `Inspektion: ${p.sec}s – ${p.hint}`;
+    return `+2 bei Start · DNF in ${p.sec}s`;
+}
+
+function stopInspectionTick() {
+    if (inspectionInterval) {
+        clearInterval(inspectionInterval);
+        inspectionInterval = null;
+    }
+}
+
+function ensureInspectionTick() {
+    if (!inspectionInterval) {
+        inspectionInterval = setInterval(updateInspectionUI, 100);
+    }
+}
+
+function hideInspectionUI() {
+    stopInspectionTick();
+    const overlay = document.getElementById("race-countdown");
+    const inline = document.getElementById("inspection-display");
+    const inspHint = document.getElementById("inspection-hint");
+    const statusEl = document.getElementById("race-status");
+    if (overlay) overlay.style.display = "none";
+    if (inline) inline.style.display = "none";
+    if (inspHint) inspHint.textContent = "";
+    if (statusEl) statusEl.classList.remove("inspection-active", "penalty-active");
+    if (raceRound.phase === "solving" && myRaceEnabled && raceStateCache) {
+        const ids = Object.keys(raceStateCache.raceEnabled || {}).filter((id) => raceStateCache.raceEnabled[id]);
+        const done = ids.filter((id) => raceRound.finishes[id] && raceRound.finishes[id].done).length;
+        if (statusEl) statusEl.textContent = `Runde läuft · ${done}/${ids.length} fertig`;
+    }
+}
+
+function updateInspectionUI() {
+    const overlay = document.getElementById("race-countdown");
+    const inline = document.getElementById("inspection-display");
+    const inspHint = document.getElementById("inspection-hint");
+    const statusEl = document.getElementById("race-status");
+    const secEl = document.getElementById("inspection-seconds");
+    const secInline = document.getElementById("inspection-seconds-inline");
+    const labelInline = document.getElementById("inspection-label-inline");
+    const subEl = overlay && overlay.querySelector(".inspection-sub");
+
+    if (hasPersonalRaceStarted()) {
+        hideInspectionUI();
+        if (statusEl && raceRound.phase === "solving") {
+            statusEl.textContent = running ? "Solve läuft…" : "Solve gestartet";
+            statusEl.className = "";
+        }
+        return;
+    }
+
+    const phase = getInspectionPhase();
+    if (!phase) {
+        hideInspectionUI();
+        return;
+    }
+
+    ensureInspectionTick();
+
+    const text = getInspectionStatusText();
+    const banner = document.getElementById("race-banner");
+    if (inspHint) inspHint.textContent = text;
+    if (banner) banner.textContent = text;
+    if (statusEl) {
+        statusEl.textContent = text;
+        statusEl.classList.toggle("inspection-active", phase.kind === "inspection");
+        statusEl.classList.toggle("penalty-active", phase.kind === "penalty");
+    }
+
+    const secStr = String(phase.sec);
+    if (secEl) secEl.textContent = secStr;
+    if (secInline) secInline.textContent = secStr;
+    if (labelInline) labelInline.textContent = phase.label;
+    if (subEl) subEl.textContent = phase.label;
+
+    if (inline) {
+        inline.style.display = "block";
+        inline.classList.toggle("penalty-phase", phase.kind === "penalty");
+    }
+
+    if (overlay) {
+        overlay.style.display = "flex";
+        overlay.style.color = phase.kind === "inspection" ? "#7ab8e8" : "#f0c060";
+    }
+}
+
+function renderRaceResults(rankings) {
+    const el = document.getElementById("race-results");
+    if (!Array.isArray(rankings) || !rankings.length) {
+        el.innerHTML = "";
+        return;
+    }
+    const rows = rankings
+        .map(
+            (r) =>
+                `<div class="race-place"><span class="place">#${r.place}</span><span class="pname">${escapeHtml(r.name)}</span><span class="ptime">${fmt(r.time)}</span></div>`
+        )
+        .join("");
+    el.innerHTML = `<h3>Runde – Ergebnis</h3>${rows}`;
+}
+
+function escapeHtml(s) {
+    return String(s)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;");
+}
+
+function toggleRaceMode() {
+    if (!currentRoom || !canToggleRaceModeNow()) return;
+    socket.emit("toggleRaceMode", { enabled: !myRaceEnabled });
+}
+
+function toggleRaceReady() {
+    if (!myRaceEnabled || raceRound.phase !== "ready") return;
+    if (iAmReady) {
+        socket.emit("raceUnready");
+        iAmReady = false;
+    } else {
+        socket.emit("raceReady");
+        iAmReady = true;
+    }
+    updateRaceUI();
+}
+
+function nextRound() {
+    if (!confirm("Neue Runde starten?")) return;
+    socket.emit("nextRound");
+    document.getElementById("race-banner").textContent = "";
+    document.getElementById("penalty-btns").style.display = "none";
+    iAmReady = false;
+}
+
+function endRound() {
+    if (!confirm("Runde für alle beenden? Nicht Fertige werden als DNF gewertet.")) return;
+    socket.emit("endRound");
+}
+
+function canArmTimer() {
+    // Solo / kein Room / nicht im Race Mode: normal timen
+    if (!currentRoom || !myRaceEnabled) return true;
+    // Zwischen Runden im Race Mode: solo timen erlaubt
+    if (raceRound.phase === "idle" || raceRound.phase === "results") return true;
+    // Warten auf Ready: erst nach Inspektion starten
+    if (raceRound.phase === "ready") return false;
+    if (raceRound.phase !== "solving") return true;
+
+    const fin = myId && raceRound.finishes ? raceRound.finishes[myId] : null;
+    if (fin && fin.done) return false;
+    if (running) return true;
+    if (fin && fin.started) return true;
+    // Inspektion / +2-Fenster: starten bis DNF-Frist (Fallback wenn Timestamps fehlen)
+    if (!raceRound.inspectionDnfAt) return true;
+    return Date.now() < raceRound.inspectionDnfAt;
+}
+
+function showRaceFinisher(data) {
+    const t = data.time === null ? "DNF" : fmt(data.time);
+    const msg = `${data.name} ist fertig – ${t}`;
+    document.getElementById("race-banner").textContent = msg;
+    lastRaceFinisherMsg = msg;
 }
 
 const STORAGE_NAME_KEY = "livetimer_display_name";
@@ -240,8 +729,11 @@ function doJoinRoom(room, name) {
     socket.emit("joinRoom", { roomId: room, name: n });
     document.getElementById("roomStatus").textContent = room + " | " + n;
     document.getElementById("users").innerHTML = "";
-    document.getElementById("btn-clear").style.display = "inline-block";
-    document.getElementById("btn-copy-link").style.display = "inline-block";
+    for (const k in usersCache) delete usersCache[k];
+    relocateToolbarButtons();
+    updateRaceUI();
+    updateTouchZoneUI();
+    updateInspectionUI();
 }
 
 function joinFromRoomCode(room) {
@@ -459,10 +951,15 @@ function renderSolveList() {
     if (isDroppedInLastAo5(i, mySolves)) timeStr = `(${timeStr})`;
     else if (i < 4 && t === Infinity) timeStr = "DNF";
 
+    const ao5Cls = ao5 !== null && bestAo5 !== null && ao5 === bestAo5 ? " best-avg" : "";
+    const ao12Cls = ao12 !== null && bestAo12 !== null && ao12 === bestAo12 ? " best-avg" : "";
+
     html += `<div class="solve-row${isLatest ? " latest" : ""}" data-solve-index="${i}">
         <span class="num">${i + 1}</span>
         <span class="time${isPB ? " pb" : ""}">${timeStr}</span>
-        ...
+        <span class="avg${ao5Cls}">${fmt(ao5)}</span>
+        <span class="avg${ao12Cls}">${fmt(ao12)}</span>
+        <span class="bestcell">${best !== null ? fmt(best) : "–"}</span>
     </div>`;
 }
     el.innerHTML = html;
@@ -519,7 +1016,41 @@ socket.on("solveUpdate", (data) => {
     renderUser(data.id, data.name, "", solves, data.ao5);
 });
 
+socket.on("raceState", (state) => {
+    applyRaceState(state);
+});
+
+socket.on("raceFinisher", (data) => {
+    showRaceFinisher(data);
+});
+
+socket.on("raceInspectionPenalty", (data) => {
+    if (data) {
+        if (data.inspectionPenaltyAt != null) raceRound.inspectionPenaltyAt = Number(data.inspectionPenaltyAt);
+        if (data.inspectionDnfAt != null) raceRound.inspectionDnfAt = Number(data.inspectionDnfAt);
+    }
+    if (!hasPersonalRaceStarted()) {
+        const banner = document.getElementById("race-banner");
+        if (banner) banner.textContent = "+2 wenn du jetzt startest";
+    }
+    updateInspectionUI();
+});
+
+socket.on("raceInspectionEnded", () => {
+    updateInspectionUI();
+    updateRaceUI();
+});
+
+socket.on("roundResults", (data) => {
+    if (data && data.rankings) {
+        raceRound.rankings = data.rankings;
+        renderRaceResults(data.rankings);
+        document.getElementById("race-results").style.display = myRaceEnabled ? "block" : "none";
+    }
+});
+
 socket.on("initState", (data) => {
+    if (data.race) applyRaceState(data.race);
     for (const id in data.names) {
         const solves = normalizeSolveArray(data.solves[id]);
 
@@ -553,6 +1084,7 @@ socket.on("initState", (data) => {
 socket.on("removeUser", (id) => {
     const el = document.getElementById("u_"+id);
     if (el) el.remove();
+    delete usersCache[id];
 });
 
 socket.on("roomsList", (data) => {
@@ -566,7 +1098,7 @@ socket.on("roomsChanged", (data) => {
     }
 });
 
-function renderUser(id, name, scramble, solves, ao5) {
+function renderUser(id, name, scramble, solves, ao5, fromCacheRefresh) {
     let el = document.getElementById("u_"+id);
     if (!el) {
         el = document.createElement("div");
@@ -585,15 +1117,29 @@ function renderUser(id, name, scramble, solves, ao5) {
     const finiteArr = arr.filter(Number.isFinite);
     const bestv = finiteArr.length ? Math.min(...finiteArr) : null;
 
-    const recent = [...arr].reverse().slice(0,8);
+    const recent = [...arr].reverse().slice(0, 8);
     const rows = recent.length
         ? recent.map((t,i) => `<div class="box-solve-row"><span class="box-num">#${arr.length-i}</span><span>${fmt(t)}</span></div>`).join("")
         : '<div style="color:#383838;font-size:11px;padding:2px 0;">Keine Solves</div>';
-    const lastTime = arr.length ? fmt(arr[arr.length - 1]) : "–";
+
+    const prevLive = el.querySelector(".live-time");
+    const liveText =
+        fromCacheRefresh && prevLive && raceRound.phase === "solving" && isUserInRace(id) && !raceRound.finishes?.[id]?.done
+            ? prevLive.textContent
+            : arr.length
+              ? fmt(arr[arr.length - 1])
+              : "–";
+
+    const safeName = escapeHtml(name || "?");
+    usersCache[id] = { name: name || "?", scramble: scr, solves: arr, ao5 };
+
     el.innerHTML = `
-    <b>${name||"?"}</b>
-    <div class="live-time" style="font-size:28px;font-family:'Courier New',monospace;color:#50e050;text-align:center;padding:4px 0;min-height:38px;">${lastTime}</div>
-        <div class="scramble-text">${scr||"–"}</div>
+    <div class="box-title-row">
+        <b>${safeName}</b>
+        ${raceBadgeHtml(id)}
+    </div>
+    <div class="live-time" style="font-size:28px;font-family:'Courier New',monospace;color:#50e050;text-align:center;padding:4px 0;min-height:38px;">${liveText}</div>
+        <div class="scramble-text">${escapeHtml(scr || "–")}</div>
         <div class="box-stats">
             <span>AO5 <b>${fmt(ao5v)}</b></span>
             <span>AO12 <b>${fmt(ao12v)}</b></span>
@@ -602,12 +1148,113 @@ function renderUser(id, name, scramble, solves, ao5) {
         <div class="box-solves">${rows}</div>`;
 }
 
+const MOBILE_MQ = window.matchMedia("(max-width: 768px)");
+const TOOLBAR_BTN_IDS = ["btn-new-scramble", "btn-race-mode", "btn-clear", "btn-copy-link", "btn-next-round", "btn-end-round"];
+
+function isMobileLayout() {
+    return MOBILE_MQ.matches;
+}
+
+function setToolbarBtnVisible(el, visible) {
+    if (!el) return;
+    if (!visible) {
+        el.style.display = "none";
+        return;
+    }
+    el.style.display = isMobileLayout() ? "block" : "inline-block";
+}
+
+function relocateToolbarButtons() {
+    const topbarSlot = document.getElementById("topbar-actions");
+    const roomSlot = document.getElementById("room-actions");
+    if (!topbarSlot || !roomSlot) return;
+    const target = isMobileLayout() ? roomSlot : topbarSlot;
+    for (const id of TOOLBAR_BTN_IDS) {
+        const btn = document.getElementById(id);
+        if (btn && btn.parentElement !== target) target.appendChild(btn);
+    }
+    roomSlot.classList.toggle("in-room", isMobileLayout() && !!currentRoom);
+}
+
+function setMobileTab(tab) {
+    const main = document.getElementById("main");
+    if (!main) return;
+    main.classList.remove("view-timer", "view-solves", "view-room");
+    main.classList.add("view-" + tab);
+    document.querySelectorAll("#bottom-tabs button").forEach((b) => {
+        b.classList.toggle("active", b.dataset.tab === tab);
+    });
+}
+
+function updateTouchZoneUI() {
+    const zone = document.getElementById("touch-zone");
+    const label = document.getElementById("touch-zone-label");
+    const hint = document.getElementById("hint");
+    const timer = document.getElementById("timer");
+    if (!zone || !label) return;
+
+    zone.classList.remove("arming", "ready", "running");
+    if (timer) {
+        if (timer.classList.contains("arming")) zone.classList.add("arming");
+        if (timer.classList.contains("ready")) zone.classList.add("ready");
+    }
+    if (running) zone.classList.add("running");
+
+    if (!isMobileLayout()) return;
+
+    let text = "Gedrückt halten, dann loslassen";
+    if (running) text = "Tippen zum Stoppen";
+    else if (timer && timer.classList.contains("ready")) text = "Loslassen zum Start";
+    else if (timer && timer.classList.contains("arming")) text = "Halten…";
+    label.textContent = text;
+
+    if (hint && !isRaceRoundActive()) {
+        if (running) hint.textContent = "Tippen zum Stoppen";
+        else if (timer && timer.classList.contains("ready")) hint.textContent = "Loslassen zum Start";
+        else hint.textContent = "Halten & loslassen zum Starten";
+    }
+}
+
+function timerArmStart() {
+    if (!canArmTimer()) return;
+    if (running) {
+        stop();
+        return;
+    }
+    document.getElementById("timer").classList.add("arming");
+    holdTimer = setTimeout(() => {
+        armed = true;
+        document.getElementById("timer").classList.remove("arming");
+        document.getElementById("timer").classList.add("ready");
+        updateTouchZoneUI();
+    }, 500);
+    updateTouchZoneUI();
+}
+
+function timerArmEnd() {
+    clearTimeout(holdTimer);
+    document.getElementById("timer").classList.remove("arming");
+    if (armed && !running && canArmTimer()) start();
+    armed = false;
+    updateTouchZoneUI();
+}
+
 function start() {
-    document.getElementById("penalty-btns").style.display = "none"; // ← neu
+    document.getElementById("penalty-btns").style.display = "none";
     if (running) return;
+    if (myRaceEnabled && raceRound.phase === "solving" && myId) {
+        const fin = raceRound.finishes && raceRound.finishes[myId];
+        if (!fin || !fin.started) {
+            markPersonalRaceStarted();
+            socket.emit("raceSolveStart");
+            hideInspectionUI();
+        }
+    }
     running   = true;
     startTime = Date.now();
     document.getElementById("timer").classList.remove("ready","arming");
+    updateTouchZoneUI();
+    updateInspectionUI();
     interval = setInterval(() => {
         document.getElementById("timer").textContent = ((Date.now()-startTime)/1000).toFixed(2);
         socket.emit("timeUpdate", ((Date.now()-startTime)/1000).toFixed(2));
@@ -622,9 +1269,11 @@ function stop() {
     document.getElementById("timer").classList.remove("ready","arming");
     const final = ((Date.now()-startTime)/1000).toFixed(2);
     document.getElementById("timer").textContent = final;
+    const inRaceSolve = myRaceEnabled && raceRound.phase === "solving";
     socket.emit("solveEnd", final);
-    document.getElementById("penalty-btns").style.display = "flex"; // ← neu
-    newScramble();
+    document.getElementById("penalty-btns").style.display = "flex";
+    updateTouchZoneUI();
+    if (!inRaceSolve) newScramble();
 }
 
 function applyPenalty(type) {
@@ -648,25 +1297,68 @@ document.getElementById("solve-list").addEventListener("contextmenu", (e) => {
     deleteSolve(idx);
 });
 
+let solveLongPressTimer = null;
+const solveListEl = document.getElementById("solve-list");
+solveListEl.addEventListener("touchstart", (e) => {
+    const row = e.target.closest(".solve-row");
+    if (!row || !solveListEl.contains(row)) return;
+    const idx = parseInt(row.dataset.solveIndex, 10);
+    if (!Number.isInteger(idx) || idx < 0) return;
+    solveLongPressTimer = setTimeout(() => {
+        solveLongPressTimer = null;
+        if (navigator.vibrate) navigator.vibrate(30);
+        deleteSolve(idx);
+    }, 550);
+}, { passive: true });
+solveListEl.addEventListener("touchend", () => {
+    if (solveLongPressTimer) clearTimeout(solveLongPressTimer);
+    solveLongPressTimer = null;
+});
+solveListEl.addEventListener("touchmove", () => {
+    if (solveLongPressTimer) clearTimeout(solveLongPressTimer);
+    solveLongPressTimer = null;
+});
+solveListEl.addEventListener("touchcancel", () => {
+    if (solveLongPressTimer) clearTimeout(solveLongPressTimer);
+    solveLongPressTimer = null;
+});
+
+const touchZone = document.getElementById("touch-zone");
+touchZone.addEventListener("touchstart", (e) => {
+    e.preventDefault();
+    timerArmStart();
+}, { passive: false });
+touchZone.addEventListener("touchend", (e) => {
+    e.preventDefault();
+    timerArmEnd();
+}, { passive: false });
+touchZone.addEventListener("touchcancel", () => timerArmEnd());
+
+document.querySelectorAll("#bottom-tabs button").forEach((btn) => {
+    btn.addEventListener("click", () => setMobileTab(btn.dataset.tab));
+});
+MOBILE_MQ.addEventListener("change", () => {
+    relocateToolbarButtons();
+    updateRaceUI();
+    updateTouchZoneUI();
+    updateInspectionUI();
+});
+relocateToolbarButtons();
+updateTouchZoneUI();
+updateInspectionUI();
+
 document.addEventListener("keydown", (e) => {
     if (e.code !== "Space" || e.repeat) return;
+    if (!canArmTimer()) return;
     e.preventDefault();
-    if (running) { stop(); return; }
-    document.getElementById("timer").classList.add("arming");
-    holdTimer = setTimeout(() => {
-        armed = true;
-        document.getElementById("timer").classList.remove("arming");
-        document.getElementById("timer").classList.add("ready");
-    }, 500);
+    timerArmStart();
 });
 
 document.addEventListener("keyup", (e) => {
     if (e.code !== "Space") return;
+    if (!canArmTimer() && !running) return;
     e.preventDefault();
-    clearTimeout(holdTimer);
-    document.getElementById("timer").classList.remove("arming");
-    if (armed && !running) start();
-    armed = false;
+    timerArmEnd();
 });
 
 window.addEventListener("blur", () => { if (running) stop(); });
