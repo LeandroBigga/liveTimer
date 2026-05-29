@@ -2,8 +2,7 @@
 <html>
 <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>Room Timer</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, user-scalable=no">    <title>Room Timer</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: Arial, sans-serif; background: #1a1a1a; color: #e0e0e0; min-height: 100vh; }
@@ -82,6 +81,7 @@
         #race-controls button:hover { background: #333; }
         #race-controls button.ready-on { background: #1a3a1a; border-color: #4a8; color: #8f8; }
         #race-controls button:disabled { opacity: 0.4; cursor: not-allowed; }
+        
         #race-banner { font-size: 15px; color: #f0c060; min-height: 22px; text-align: center; }
         #race-results { display: none; width: 100%; max-width: 420px; background: #141414; border: 1px solid #2a2a2a; border-radius: 8px; padding: 14px 16px; }
         #race-results h3 { font-size: 12px; color: #666; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; font-weight: normal; }
@@ -114,6 +114,167 @@
         #bottom-tabs button.active { color: #7ab8e8; box-shadow: inset 0 -2px 0 #7ab8e8; }
         #penalty-btns { display: none; gap: 8px; flex-wrap: wrap; justify-content: center; }
         #penalty-btns button { min-height: 44px; min-width: 72px; padding: 10px 20px !important; font-size: 14px !important; }
+        input,
+        button,
+        select,
+        textarea {
+            font-size: 16px !important;
+        }
+        @media (max-width: 768px) {
+            #bottom-tabs,
+            #bottom-tabs *,
+            #penalty-btns,
+            #penalty-btns *,
+            #room-actions,
+            #room-actions * {
+                pointer-events: auto !important;
+                position: relative;
+                z-index: 10002;
+}
+    body.solving-mobile #touch-zone-label,
+    body.solving-mobile #hint,
+    body.solving-mobile #scramble {
+        display: none !important;
+    }
+
+    body.solving-mobile #main {
+        padding: 0 !important;
+        margin: 0 !important;
+        height: 100vh;
+        width: 100vw;
+    }
+
+    body.solving-mobile #timer-wrap {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #000;
+        width: 100vw;
+        height: 100vh;
+        padding: env(safe-area-inset-top)
+                 env(safe-area-inset-right)
+                 env(safe-area-inset-bottom)
+                 env(safe-area-inset-left);
+    }
+
+    body.solving-mobile #touch-zone {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        border-radius: 0 !important;
+        background: transparent !important;
+        z-index: 1;
+    }
+
+    body.solving-mobile #timer {
+        font-size: clamp(72px, 22vw, 160px);
+        z-index: 2;
+    }
+
+    #penalty-btns {
+    position: fixed;
+    bottom: calc(env(safe-area-inset-bottom) + 60px);
+    left: 0;
+    right: 0;
+    z-index: 45;
+    pointer-events: none;
+    display: none;
+    justify-content: space-between;
+    padding: 0 18px;
+}
+#bottom-tabs {
+    z-index: 100;
+}
+#penalty-btns button {
+    position: fixed;
+    bottom: calc(env(safe-area-inset-bottom) + 72px);
+
+    width: 84px;
+    height: 84px;
+
+    border-radius: 999px;
+    border: none;
+
+    font-size: 22px !important;
+    font-weight: bold;
+
+    opacity: 0.22;
+    backdrop-filter: blur(8px);
+
+    pointer-events: auto;
+
+    transition:
+        opacity 0.15s,
+        transform 0.12s;
+}
+
+#penalty-btns button:active {
+    opacity: 0.42;
+    transform: scale(0.96);
+}
+#plus2-btn {
+    right: 18px;
+    background: rgba(240,192,96,0.35);
+    color: #f0c060;
+}
+
+#dnf-btn {
+    left: 18px;
+    background: rgba(224,80,80,0.35);
+    color: #ff8080;
+}
+#btn-next-round-inline {
+    width: calc(100% - 32px);
+    max-width: 320px;
+    pointer-events: auto;
+    margin: 0 auto;
+}
+    #touch-zone {
+        touch-action: manipulation;
+        user-select: none;
+        -webkit-user-select: none;
+    }
+    @supports (height: 100dvh) {
+        body.solving-mobile #timer-wrap {
+            height: 100dvh;
+        }
+    }
+    #main.view-room #room-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    #main.view-timer #room-actions,
+#main.view-solves #room-actions {
+    display: none;
+}
+
+    #room-actions button {
+        flex: 1 1 calc(50% - 8px);
+        min-height: 48px;
+    }
+
+    #timer-wrap {
+        min-height: calc(100vh - 140px);
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+
+    #scramble {
+        padding: 8px 12px;
+        font-size: 15px;
+        line-height: 1.45;
+    }
+
+    #users {
+        padding-bottom: 90px;
+    }
+}
         @media (max-width: 768px) {
             #topbar { padding: 8px 10px; gap: 8px; }
             #topbar h1.topbar-title { font-size: 14px; margin-right: 0; width: 100%; }
@@ -161,6 +322,7 @@
             #roomsPanel { left: 8px; right: 8px; width: auto; max-width: none; }
             #race-controls button { min-height: 44px; min-width: 120px; }
         }
+        
         @media (min-width: 769px) {
             #room-actions { display: none !important; }
             #bottom-tabs { display: none !important; }
@@ -229,15 +391,17 @@
             <div id="current-ao5"></div>
             <span id="touch-zone-label">Gedrückt halten, dann loslassen</span>
         </div>
+        <div id="action-row" style="display:none;gap:8px;width:calc(100% - 20px);max-width:380px;margin:0 auto;">
+            <button type="button" id="plus2-btn" onclick="applyPenalty('+2')" style="flex:1;min-height:48px;background:#1a2a3a;border:1px solid #f0c060;color:#f0c060;border-radius:6px;cursor:pointer;font-size:14px;font-weight:bold;">+2</button>
+            <button type="button" id="btn-next-round-inline" onclick="nextRound()" style="flex:2;min-height:48px;background:#1a2a3a;border:1px solid #48a;color:#7ab8e8;border-radius:6px;cursor:pointer;font-size:14px;">▶ Nächste Runde</button>
+            <button type="button" id="dnf-btn" onclick="applyPenalty('DNF')" style="flex:1;min-height:48px;background:#1a2a3a;border:1px solid #e06060;color:#e06060;border-radius:6px;cursor:pointer;font-size:14px;font-weight:bold;">DNF</button>
+        </div>
         <div id="center-meta">
             <div id="inspection-hint"></div>
             <div id="race-status"></div>
             <div id="race-controls" style="display:none"></div>
             <div id="race-results"></div>
-            <div id="penalty-btns">
-                <button type="button" onclick="applyPenalty('+2')" style="background:#2a2a2a;border:1px solid #f0c060;color:#f0c060;border-radius:4px;cursor:pointer;">+2</button>
-                <button type="button" onclick="applyPenalty('DNF')" style="background:#2a2a2a;border:1px solid #e06060;color:#e06060;border-radius:4px;cursor:pointer;">DNF</button>
-            </div>
+            <div id="penalty-btns" style="display:none"></div>
             <div id="hint">Leertaste halten → loslassen zum Starten</div>
         </div>
     </div>
@@ -395,12 +559,18 @@ function updateRaceUI() {
         setToolbarBtnVisible(btnRace, false);
     }
 
-    setToolbarBtnVisible(btnNext, isHost && currentRoom && (phase === "idle" || phase === "results"));
-    setToolbarBtnVisible(
-        btnEnd,
+    setToolbarBtnVisible(btnEnd,
         isHost && currentRoom && (phase === "ready" || phase === "solving")
     );
-
+    const btnNextInline = document.getElementById("btn-next-round-inline");
+    const showNext = !!(isHost && currentRoom && (phase === "idle" || phase === "results"));
+    if (btnNextInline) {
+        btnNextInline.style.display = showNext ? "flex" : "none";
+        btnNextInline.style.flex = showNext ? "2" : "0";
+        btnNextInline.style.minWidth = showNext ? "" : "0";
+        btnNextInline.style.padding = showNext ? "" : "0";
+        btnNextInline.style.border = showNext ? "" : "none";
+    }
     if (myRaceEnabled && isRaceRoundActive()) {
         setToolbarBtnVisible(btnScramble, false);
     } else {
@@ -453,11 +623,26 @@ function updateRaceUI() {
         const inspHint = document.getElementById("inspection-hint");
         if (inspHint) inspHint.textContent = "";
         renderRaceResults(raceRound.rankings);
+        // Zeige action-row mit Nächste Runde Button für Host
+        if (isHost) {
+            document.getElementById("action-row").style.display = "flex";
+        }
     }
     updateTouchZoneUI();
     updateInspectionUI();
 }
+function updateMobileSolveMode() {
+    if (!isMobileLayout()) {
+        document.body.classList.remove("solving-mobile");
+        return;
+    }
 
+    if (running) {
+        document.body.classList.add("solving-mobile");
+    } else {
+        document.body.classList.remove("solving-mobile");
+    }
+}
 function normalizeRaceRoundTimestamps() {
     for (const k of ["inspectionStartAt", "inspectionPenaltyAt", "inspectionDnfAt"]) {
         if (raceRound[k] != null && raceRound[k] !== "") {
@@ -650,7 +835,7 @@ function nextRound() {
     if (!confirm("Neue Runde starten?")) return;
     socket.emit("nextRound");
     document.getElementById("race-banner").textContent = "";
-    document.getElementById("penalty-btns").style.display = "none";
+    document.getElementById("action-row").style.display = "none";
     iAmReady = false;
 }
 
@@ -1172,8 +1357,13 @@ function renderUser(id, name, scramble, solves, ao5, fromCacheRefresh) {
 }
 
 const MOBILE_MQ = window.matchMedia("(max-width: 768px)");
-const TOOLBAR_BTN_IDS = ["btn-new-scramble", "btn-race-mode", "btn-clear", "btn-copy-link", "btn-next-round", "btn-end-round"];
-
+const TOOLBAR_BTN_IDS = [
+    "btn-new-scramble",
+    "btn-race-mode",
+    "btn-end-round",
+    "btn-clear",
+    "btn-copy-link"
+];
 function isMobileLayout() {
     return MOBILE_MQ.matches;
 }
@@ -1263,7 +1453,7 @@ function timerArmEnd() {
 }
 
 function start() {
-    document.getElementById("penalty-btns").style.display = "none";
+    document.getElementById("action-row").style.display = "none";
     if (running) return;
     if (myRaceEnabled && raceRound.phase === "solving" && myId) {
         const fin = raceRound.finishes && raceRound.finishes[myId];
@@ -1274,6 +1464,7 @@ function start() {
         }
     }
     running   = true;
+    updateMobileSolveMode();
     startTime = Date.now();
     document.getElementById("timer").classList.remove("ready","arming");
     updateTouchZoneUI();
@@ -1287,6 +1478,7 @@ function start() {
 function stop() {
     if (!running) return;
     running = false;
+    updateMobileSolveMode();
     clearInterval(interval); interval = null;
     clearTimeout(holdTimer);
     document.getElementById("timer").classList.remove("ready","arming");
@@ -1294,16 +1486,18 @@ function stop() {
     document.getElementById("timer").textContent = final;
     const inRaceSolve = myRaceEnabled && raceRound.phase === "solving";
     socket.emit("solveEnd", final);
-    document.getElementById("penalty-btns").style.display = "flex";
-    updateTouchZoneUI();
+    // penalty-btns immer zeigen außer wenn Race Solve gerade läuft
+    if (!inRaceSolve) {
+        document.getElementById("action-row").style.display = "flex";
+    }
+    updateRaceUI();  updateTouchZoneUI();
     if (!inRaceSolve) newScramble();
 }
 
 function applyPenalty(type) {
     if (!mySolves.length) return;
 
-    document.getElementById("penalty-btns").style.display = "none";
-
+    document.getElementById("action-row").style.display = "none";
     socket.emit("updateLastSolve", { type });
 }
 function deleteSolve(i) {
@@ -1346,23 +1540,33 @@ solveListEl.addEventListener("touchcancel", () => {
     solveLongPressTimer = null;
 });
 
-const touchZone = document.getElementById("touch-zone");
-touchZone.addEventListener("touchstart", (e) => {
+const mobileTouchTarget = document.getElementById("touch-zone");
+
+mobileTouchTarget.addEventListener("touchstart", (e) => {
     e.preventDefault();
     timerArmStart();
 }, { passive: false });
-touchZone.addEventListener("touchend", (e) => {
+
+mobileTouchTarget.addEventListener("touchend", (e) => {
     e.preventDefault();
     timerArmEnd();
 }, { passive: false });
-touchZone.addEventListener("touchcancel", () => timerArmEnd());
 
+mobileTouchTarget.addEventListener("touchcancel", () => timerArmEnd());
+
+mobileTouchTarget.addEventListener("touchend", (e) => {
+    e.preventDefault();
+    timerArmEnd();
+}, { passive: false });
+
+mobileTouchTarget.addEventListener("touchcancel", () => timerArmEnd());
 document.querySelectorAll("#bottom-tabs button").forEach((btn) => {
     btn.addEventListener("click", () => setMobileTab(btn.dataset.tab));
 });
 MOBILE_MQ.addEventListener("change", () => {
     relocateToolbarButtons();
     updateRaceUI();
+    updateMobileSolveMode();
     updateTouchZoneUI();
     updateInspectionUI();
 });
